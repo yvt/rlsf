@@ -236,8 +236,8 @@ macro_rules! gen_test {
 
                 let mut it = bytecode.iter().cloned();
                 loop {
-                    match it.next()? % 2 {
-                        0 => {
+                    match it.next()? % 8 {
+                        0..=2 => {
                             let len = u32::from_le_bytes([
                                 it.next()?,
                                 it.next()?,
@@ -257,7 +257,7 @@ macro_rules! gen_test {
                                 sa.allocate(layout, ptr);
                             }
                         }
-                        1 => {
+                        3..=5 => {
                             let alloc_i = it.next()?;
                             if allocs.len() > 0 {
                                 let alloc = allocs.swap_remove(alloc_i as usize % allocs.len());
@@ -265,6 +265,35 @@ macro_rules! gen_test {
 
                                 unsafe { tlsf.deallocate(alloc.ptr, alloc.layout.align()) };
                                 sa.deallocate(alloc.layout, alloc.ptr);
+                            }
+                        }
+                        6..=7 => {
+                            let alloc_i = it.next()?;
+                            if allocs.len() > 0 {
+                                let len = u32::from_le_bytes([
+                                    it.next()?,
+                                    it.next()?,
+                                    it.next()?,
+                                    0,
+                                ]);
+                                let len = ((len as u64 * pool_size as u64) >> 24) as usize;
+
+                                let alloc_i = alloc_i as usize % allocs.len();
+                                let alloc = &mut allocs[alloc_i];
+                                log::trace!("realloc {:?} to {:?}", alloc, len);
+
+                                let new_layout = Layout::from_size_align(len, alloc.layout.align()).unwrap();
+
+                                if let Some(ptr) = unsafe { tlsf.reallocate(alloc.ptr, new_layout) } {
+                                    log::trace!(" {:?} → {:?}", alloc.ptr, ptr);
+                                    sa.deallocate(alloc.layout, alloc.ptr);
+                                    alloc.ptr = ptr;
+                                    alloc.layout = new_layout;
+                                    sa.allocate(alloc.layout, alloc.ptr);
+                                } else {
+                                    log::trace!(" {:?} → fail", alloc.ptr);
+
+                                }
                             }
                         }
                         _ => unreachable!(),
