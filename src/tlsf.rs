@@ -831,109 +831,114 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         let old_size = block.as_ref().common.size & SIZE_SIZE_MASK;
 
-        if new_size > old_size {
-            let grow_by = new_size - old_size;
+        if new_size <= old_size {
+            if new_size == old_size {
+                // No size change
+            } else {
+                // Shrink the block, creating a new free block at the end
+                let shrink_by = old_size - new_size;
 
-            // Grow into the next free block. Fail if there isn't such a block.
-            let next_phys_block = block.as_ref().common.next_phys_block()?;
-            let mut next_phys_block_size_and_flags = next_phys_block.as_ref().size;
-            let mut next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
-
-            // Fail it isn't a free block.
-            if (next_phys_block_size_and_flags & SIZE_USED) != 0 {
-                return None;
-            }
-
-            // Now we know it's really a free block.
-            let mut next_phys_block = next_phys_block.cast::<FreeBlockHdr>();
-            let next_next_phys_block = next_phys_block.as_ref().common.next_phys_block();
-
-            if grow_by > next_phys_block_size {
-                // Can't fit
-                return None;
-            }
-
-            self.unlink_free_block(next_phys_block, next_phys_block_size);
-
-            if grow_by < next_phys_block_size {
-                // Can fit and there's some slack. Create a free block, which
-                // will inherit the original free block's `SIZE_LAST_IN_POOL`.
-                next_phys_block_size_and_flags -= grow_by;
-                next_phys_block_size -= grow_by;
-
-                next_phys_block =
+                // We will create a new free block at this address
+                let mut new_free_block: NonNull<FreeBlockHdr> =
                     NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-                debug_assert!((next_phys_block_size_and_flags & SIZE_USED) == 0);
-                next_phys_block.as_mut().common = BlockHdr {
-                    size: next_phys_block_size_and_flags,
+                let mut new_free_block_size_and_flags =
+                    shrink_by + (block.as_ref().common.size & SIZE_LAST_IN_POOL);
+
+                // If the next block is a free block...
+                if let Some(mut next_phys_block) = block.as_ref().common.next_phys_block() {
+                    let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
+                    let next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
+
+                    if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
+                        // Then we can merge this existing free block (`next_phys_block`)
+                        // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
+                        // as well if `next_phys_block` has one.
+                        self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
+                        new_free_block_size_and_flags += next_phys_block_size;
+
+                        if let Some(mut next_next_phys_block) =
+                            next_phys_block.as_ref().next_phys_block()
+                        {
+                            next_next_phys_block.as_mut().prev_phys_block =
+                                Some(new_free_block.cast());
+                        }
+                    } else {
+                        // We can't merge an used block (`next_phys_block`) and
+                        // a free block (`new_free_block`).
+                        next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
+                    }
+                }
+
+                debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
+                new_free_block.as_mut().common = BlockHdr {
+                    size: new_free_block_size_and_flags,
                     prev_phys_block: Some(block.cast()),
                 };
-                self.link_free_block(next_phys_block, next_phys_block_size);
+                self.link_free_block(
+                    new_free_block,
+                    new_free_block_size_and_flags & SIZE_SIZE_MASK,
+                );
 
-                // Update `next_next_phys_block.prev_phys_block` if necessary
-                if let Some(mut next_next_phys_block) = next_next_phys_block {
-                    next_next_phys_block.as_mut().prev_phys_block = Some(next_phys_block.cast());
-                }
-            } else {
-                // Can fit exactly. Copy the `SIZE_LAST_IN_POOL` flag if
-                // `next_phys_block` has one.
-                new_size += next_phys_block_size_and_flags & SIZE_LAST_IN_POOL;
-
-                // Update `next_next_phys_block.prev_phys_block` if necessary
-                if let Some(mut next_next_phys_block) = next_next_phys_block {
-                    next_next_phys_block.as_mut().prev_phys_block = Some(block.cast());
-                }
+                block.as_mut().common.size = new_size | SIZE_USED;
             }
 
-            block.as_mut().common.size = new_size | SIZE_USED;
-        } else if new_size < old_size {
-            // Shrink the block, creating a new free block at the end
-            let shrink_by = old_size - new_size;
+            return Some(ptr);
+        }
 
-            // We will create a new free block at this address
-            let mut new_free_block: NonNull<FreeBlockHdr> =
+        let grow_by = new_size - old_size;
+
+        // Grow into the next free block. Fail if there isn't such a block.
+        let next_phys_block = block.as_ref().common.next_phys_block()?;
+        let mut next_phys_block_size_and_flags = next_phys_block.as_ref().size;
+        let mut next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
+
+        // Fail it isn't a free block.
+        if (next_phys_block_size_and_flags & SIZE_USED) != 0 {
+            return None;
+        }
+
+        // Now we know it's really a free block.
+        let mut next_phys_block = next_phys_block.cast::<FreeBlockHdr>();
+        let next_next_phys_block = next_phys_block.as_ref().common.next_phys_block();
+
+        if grow_by > next_phys_block_size {
+            // Can't fit
+            return None;
+        }
+
+        self.unlink_free_block(next_phys_block, next_phys_block_size);
+
+        if grow_by < next_phys_block_size {
+            // Can fit and there's some slack. Create a free block, which
+            // will inherit the original free block's `SIZE_LAST_IN_POOL`.
+            next_phys_block_size_and_flags -= grow_by;
+            next_phys_block_size -= grow_by;
+
+            next_phys_block =
                 NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-            let mut new_free_block_size_and_flags =
-                shrink_by + (block.as_ref().common.size & SIZE_LAST_IN_POOL);
-
-            // If the next block is a free block...
-            if let Some(mut next_phys_block) = block.as_ref().common.next_phys_block() {
-                let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
-                let next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
-
-                if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
-                    // Then we can merge this existing free block (`next_phys_block`)
-                    // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
-                    // as well if `next_phys_block` has one.
-                    self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
-                    new_free_block_size_and_flags += next_phys_block_size;
-
-                    if let Some(mut next_next_phys_block) =
-                        next_phys_block.as_ref().next_phys_block()
-                    {
-                        next_next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
-                    }
-                } else {
-                    // We can't merge an used block (`next_phys_block`) and
-                    // a free block (`new_free_block`).
-                    next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
-                }
-            }
-
-            debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
-            new_free_block.as_mut().common = BlockHdr {
-                size: new_free_block_size_and_flags,
+            debug_assert!((next_phys_block_size_and_flags & SIZE_USED) == 0);
+            next_phys_block.as_mut().common = BlockHdr {
+                size: next_phys_block_size_and_flags,
                 prev_phys_block: Some(block.cast()),
             };
-            self.link_free_block(
-                new_free_block,
-                new_free_block_size_and_flags & SIZE_SIZE_MASK,
-            );
+            self.link_free_block(next_phys_block, next_phys_block_size);
 
-            block.as_mut().common.size = new_size | SIZE_USED;
+            // Update `next_next_phys_block.prev_phys_block` if necessary
+            if let Some(mut next_next_phys_block) = next_next_phys_block {
+                next_next_phys_block.as_mut().prev_phys_block = Some(next_phys_block.cast());
+            }
         } else {
-            // No size change
+            // Can fit exactly. Copy the `SIZE_LAST_IN_POOL` flag if
+            // `next_phys_block` has one.
+            new_size += next_phys_block_size_and_flags & SIZE_LAST_IN_POOL;
+
+            // Update `next_next_phys_block.prev_phys_block` if necessary
+            if let Some(mut next_next_phys_block) = next_next_phys_block {
+                next_next_phys_block.as_mut().prev_phys_block = Some(block.cast());
+            }
         }
+
+        block.as_mut().common.size = new_size | SIZE_USED;
 
         Some(ptr)
     }
