@@ -853,7 +853,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                         // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
                         // as well if `next_phys_block` has one.
                         self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
-                        new_free_block_size_and_flags += next_phys_block_size;
+                        new_free_block_size_and_flags += next_phys_block_size_and_flags;
 
                         if let Some(mut next_next_phys_block) =
                             next_phys_block.as_ref().next_phys_block()
@@ -1046,7 +1046,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                     // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
                     // as well if `moving_clearance_end` has one.
                     self.unlink_free_block(moving_clearance_end.cast(), moving_clearance_end_size);
-                    new_free_block_size_and_flags += moving_clearance_end_size;
+                    new_free_block_size_and_flags += moving_clearance_end_size_and_flags;
 
                     if let Some(mut next_next_phys_block) =
                         moving_clearance_end.as_ref().next_phys_block()
