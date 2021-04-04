@@ -124,6 +124,8 @@ const SIZE_LAST_IN_POOL: usize = 2;
 /// The bits of [`BlockHdr::size`] indicating the block's size.
 const SIZE_SIZE_MASK: usize = !((1 << GRANULARITY_LOG2) - 1);
 
+// TODO: Remove `SIZE_LAST_IN_POOL` for performance and simplicity
+
 impl BlockHdr {
     /// Get the next block.
     ///
@@ -730,6 +732,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             new_next_phys_block.as_mut().prev_phys_block = Some(block.cast());
         }
     }
+
+    // TODO: `reallocate_no_move` (constant-time reallocation)
 
     /// Shrink or grow a previously allocated memory block.
     ///
