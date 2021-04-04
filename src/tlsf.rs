@@ -359,7 +359,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Examples
     ///
     /// ```
-    /// use minitlsf::Tlsf;
+    /// use rlsf::Tlsf;
     /// use std::{mem::MaybeUninit, ptr::NonNull};
     /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
@@ -437,7 +437,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Examples
     ///
     /// ```
-    /// use minitlsf::Tlsf;
+    /// use rlsf::Tlsf;
     /// use std::mem::MaybeUninit;
     /// let mut pool = [MaybeUninit::uninit(); 1024];
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
@@ -447,7 +447,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// The insertred memory block must outlive `self`:
     ///
     /// ```rust,compile_fail
-    /// use minitlsf::Tlsf;
+    /// use rlsf::Tlsf;
     /// use std::mem::MaybeUninit;
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
     /// let mut pool = [MaybeUninit::uninit(); 1024];
