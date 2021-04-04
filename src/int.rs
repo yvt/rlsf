@@ -26,6 +26,7 @@ pub trait BinInteger:
     + Send
     + Sync
     + 'static
+    + private::Sealed
 {
     const ZERO: Self;
     const BITS: u32;
@@ -68,6 +69,8 @@ pub trait BinInteger:
 
 macro_rules! impl_binary_integer {
     ($type:ty) => {
+        impl private::Sealed for $type {}
+
         impl BinInteger for $type {
             const ZERO: Self = 0;
             const BITS: u32 = core::mem::size_of::<$type>() as u32 * 8;
@@ -161,3 +164,11 @@ impl_binary_integer!(u32);
 impl_binary_integer!(u64);
 impl_binary_integer!(u128);
 impl_binary_integer!(usize);
+
+/// Implements [the sealed trait pattern], which protects [`BinInteger`] against
+/// downstream implementations.
+///
+/// [the sealed trait pattern]: https://rust-lang.github.io/api-guidelines/future-proofing.html
+mod private {
+    pub trait Sealed {}
+}
