@@ -772,12 +772,6 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         //         alignment as `align`. This is upheld by the caller.
         let block = Self::used_block_hdr_for_allocation(ptr, new_layout.align());
 
-        // Round up the allocation size. Fail if this causes an overflow.
-        let new_layout = Layout::from_size_align_unchecked(
-            new_layout.size().checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1),
-            new_layout.align(),
-        );
-
         // First try to shrink or grow the block toward the end (i.e., preseving
         // the starting address).
         if let Some(x) = self.reallocate_without_moving(ptr, block, new_layout) {
@@ -832,7 +826,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // reallocation has failed; a new place with a smaller overhead could be
         // found later (whether there's actually such a situation or not is yet
         // to be proven).
-        let mut new_size = overhead.checked_add(new_layout.size())?;
+        let new_size = overhead.checked_add(new_layout.size())?;
+        let mut new_size = new_size.checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1);
 
         let old_size = block.as_ref().common.size & SIZE_SIZE_MASK;
 
