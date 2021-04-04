@@ -784,41 +784,35 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             return Some(x);
         }
 
-        // Preserve the first `GRANULARITY / 2` bytes
-        let mut head: MaybeUninit<[usize; 2]> = MaybeUninit::uninit();
-        core::ptr::copy_nonoverlapping(ptr.as_ptr(), head.as_mut_ptr() as *mut u8, GRANULARITY / 2);
+        // Allocate a whole new memory block
+        let new_ptr = self.allocate_initializing_by(
+            new_layout,
+            #[inline]
+            |new_alloc| {
+                debug_assert!(
+                    new_layout.size()
+                        >= (block.as_ref().common.size & SIZE_SIZE_MASK)
+                            - mem::size_of::<UsedBlockHdr>()
+                );
 
+                // Move the existing data into the new location
+                core::ptr::copy_nonoverlapping(
+                    ptr.as_ptr(),
+                    new_alloc.as_ptr(),
+                    (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>(),
+                );
+            },
+        )?;
+
+        // TODO: Deallocate first while handling the failure of
+        //       `allocate_initializing_by` correctly
         // Deallocate the old memory block. This will not invalidate the
         // contained data except for the first `GRANULARITY / 2` bytes (because
         // `FreeBlockHdr` is larger than `UsedBlockHdr` by `GRANULARITY / 2`
         // bytes).
         self.deallocate(ptr, new_layout.align());
 
-        // Allocate a whole new memory block
-        self.allocate_initializing_by(
-            new_layout,
-            #[inline]
-            |new_alloc| {
-                // The contained data is still intact at this point except for
-                // the first `GRANULARITY / 2` bytes. Move it into the new
-                // location
-                core::ptr::copy(
-                    ptr.as_ptr().add(mem::size_of::<[usize; 2]>()),
-                    new_alloc.as_ptr().add(mem::size_of::<[usize; 2]>()),
-                    (block.as_ref().common.size & SIZE_SIZE_MASK)
-                        - mem::size_of::<UsedBlockHdr>()
-                        - mem::size_of::<[usize; 2]>(),
-                );
-
-                // The first `GRANULARITY / 2` bytes might have been overwritten
-                // by a new `FreeBlockHdr`, so it must be copied from `head`
-                core::ptr::copy(
-                    head.as_ptr() as *const u8,
-                    new_alloc.as_ptr(),
-                    mem::size_of::<[usize; 2]>(),
-                );
-            },
-        )
+        Some(new_ptr)
     }
 
     /// A subroutine of [`Self::reallocate`]. Attempts to shrink or grow the
