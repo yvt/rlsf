@@ -304,6 +304,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         let next_free = mem::replace(first_free, Some(block));
         block.as_mut().next_free = next_free;
         block.as_mut().prev_free = None;
+        if let Some(mut next_free) = next_free {
+            next_free.as_mut().prev_free = Some(block);
+        }
 
         self.fl_bitmap.set_bit(fl as u32);
         self.sl_bitmap[fl].set_bit(sl as u32);
