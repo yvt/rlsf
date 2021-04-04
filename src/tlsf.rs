@@ -1036,7 +1036,28 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             let mut new_free_block_size_and_flags = new_free_block_size;
 
             if let Some(mut moving_clearance_end) = moving_clearance_end {
-                moving_clearance_end.as_mut().prev_phys_block = Some(new_free_block.cast());
+                // If the next block is a free block...
+                let moving_clearance_end_size_and_flags = moving_clearance_end.as_ref().size;
+                let moving_clearance_end_size =
+                    moving_clearance_end_size_and_flags & SIZE_SIZE_MASK;
+
+                if (moving_clearance_end_size_and_flags & SIZE_USED) == 0 {
+                    // Then we can merge this existing free block (`moving_clearance_end`)
+                    // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
+                    // as well if `moving_clearance_end` has one.
+                    self.unlink_free_block(moving_clearance_end.cast(), moving_clearance_end_size);
+                    new_free_block_size_and_flags += moving_clearance_end_size;
+
+                    if let Some(mut next_next_phys_block) =
+                        moving_clearance_end.as_ref().next_phys_block()
+                    {
+                        next_next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
+                    }
+                } else {
+                    // We can't merge an used block (`moving_clearance_end`) and
+                    // a free block (`new_free_block`).
+                    moving_clearance_end.as_mut().prev_phys_block = Some(new_free_block.cast());
+                }
             } else {
                 new_free_block_size_and_flags |= SIZE_LAST_IN_POOL;
             }
