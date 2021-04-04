@@ -404,6 +404,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 size
             };
 
+            debug_assert_eq!(chunk_size % GRANULARITY, 0);
+
             // The new free block
             // Safety: `start` is not zero.
             let mut block = NonNull::new_unchecked(start as *mut FreeBlockHdr);
@@ -574,6 +576,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
             }
 
+            debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
             new_free_block.as_mut().common = BlockHdr {
                 size: new_free_block_size_and_flags,
                 prev_phys_block: Some(block.cast()),
@@ -722,6 +725,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         }
 
         // Write the new free block's size and flags.
+        debug_assert!((size & SIZE_USED) == 0);
         block.as_mut().size = size;
 
         // Link this free block to the corresponding free list
@@ -865,6 +869,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
                 next_phys_block =
                     NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
+                debug_assert!((next_phys_block_size_and_flags & SIZE_USED) == 0);
                 next_phys_block.as_mut().common = BlockHdr {
                     size: next_phys_block_size_and_flags,
                     prev_phys_block: Some(block.cast()),
@@ -921,6 +926,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 }
             }
 
+            debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
             new_free_block.as_mut().common = BlockHdr {
                 size: new_free_block_size_and_flags,
                 prev_phys_block: Some(block.cast()),
