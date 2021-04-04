@@ -475,132 +475,116 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///
     /// This method will complete in constant time.
     pub fn allocate(&mut self, layout: Layout) -> Option<NonNull<u8>> {
-        // Safety: `layout.size()` is already rounded up to `GRANULARITY` bytes
-        unsafe { self.allocate_initializing_by(layout, |_| {}) }
-    }
+        unsafe {
+            // The extra bytes consumed by the header and padding.
+            //
+            // After choosing a free block, we need to adjust the payload's location
+            // to meet the alignment requirement. Every block is aligned to
+            // `GRANULARITY` bytes. `size_of::<UsedBlockHdr>` is `GRANULARITY / 2`
+            // bytes, so the address immediately following `UsedBlockHdr` is only
+            // aligned to `GRANULARITY / 2` bytes. Consequently, we need to insert
+            // a padding containing at most `max(align - GRANULARITY / 2, 0)` bytes.
+            let max_overhead =
+                layout.align().saturating_sub(GRANULARITY / 2) + mem::size_of::<UsedBlockHdr>();
 
-    /// Similar to [`Self::allocate`] but `initer` will be called to initialize
-    /// the newly allocated memory block before any newly-created block headers
-    /// are written.
-    #[inline]
-    unsafe fn allocate_initializing_by(
-        &mut self,
-        layout: Layout,
-        initer: impl FnOnce(NonNull<u8>),
-    ) -> Option<NonNull<u8>> {
-        // The extra bytes consumed by the header and padding.
-        //
-        // After choosing a free block, we need to adjust the payload's location
-        // to meet the alignment requirement. Every block is aligned to
-        // `GRANULARITY` bytes. `size_of::<UsedBlockHdr>` is `GRANULARITY / 2`
-        // bytes, so the address immediately following `UsedBlockHdr` is only
-        // aligned to `GRANULARITY / 2` bytes. Consequently, we need to insert
-        // a padding containing at most `max(align - GRANULARITY / 2, 0)` bytes.
-        let max_overhead =
-            layout.align().saturating_sub(GRANULARITY / 2) + mem::size_of::<UsedBlockHdr>();
+            // Search for a suitable free block
+            let search_size = layout.size().checked_add(max_overhead)?;
+            let search_size = search_size.checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1);
+            let (fl, sl) = self.search_suitable_free_block_list_for_allocation(search_size)?;
 
-        // Search for a suitable free block
-        let search_size = layout.size().checked_add(max_overhead)?;
-        let search_size = search_size.checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1);
-        let (fl, sl) = self.search_suitable_free_block_list_for_allocation(search_size)?;
+            // Get a free block
+            let first_free = &mut self.first_free[fl][sl];
+            let block = first_free.unwrap_or_else(|| unreachable_unchecked());
+            let next_phys_block = block.as_ref().common.next_phys_block();
+            let size_and_flags = block.as_ref().common.size;
 
-        // Get a free block
-        let first_free = &mut self.first_free[fl][sl];
-        let block = first_free.unwrap_or_else(|| unreachable_unchecked());
-        let next_phys_block = block.as_ref().common.next_phys_block();
-        let size_and_flags = block.as_ref().common.size;
+            debug_assert!((block.as_ref().common.size & SIZE_USED) == 0);
+            debug_assert!((block.as_ref().common.size & SIZE_SIZE_MASK) >= search_size);
 
-        debug_assert!((block.as_ref().common.size & SIZE_USED) == 0);
-        debug_assert!((block.as_ref().common.size & SIZE_SIZE_MASK) >= search_size);
-
-        // Unlink the free block. We are not using `unlink_free_block` because
-        // we already know `(fl, sl)` and that `block.prev_free` is `None`.
-        *first_free = block.as_ref().next_free;
-        if let Some(mut next_free) = *first_free {
-            next_free.as_mut().prev_free = None;
-        } else {
-            // The free list is now empty - update the bitmap
-            self.sl_bitmap[fl].clear_bit(sl as u32);
-            if self.sl_bitmap[fl] == SLBitmap::ZERO {
-                self.fl_bitmap.clear_bit(fl as u32);
-            }
-        }
-
-        // Decide the starting address of the payload
-        let unaligned_ptr = block.as_ptr() as *mut u8 as usize + mem::size_of::<UsedBlockHdr>();
-        let ptr = NonNull::new_unchecked(
-            (unaligned_ptr.wrapping_add(layout.align() - 1) & !(layout.align() - 1)) as *mut u8,
-        );
-
-        if layout.align() < GRANULARITY {
-            debug_assert_eq!(unaligned_ptr, ptr.as_ptr() as usize);
-        } else {
-            debug_assert_ne!(unaligned_ptr, ptr.as_ptr() as usize);
-        }
-
-        // Initialize the payload using a supplied function.
-        // This *must* be done before initializing any newly-introduced block
-        // headers.
-        initer(ptr);
-
-        // Place a header pointer (used by `used_block_hdr_for_allocation`)
-        if layout.align() >= GRANULARITY {
-            *ptr.cast::<NonNull<_>>().as_ptr().sub(1) = block;
-        }
-
-        // Calculate the actual overhead and block size
-        let overhead = ptr.as_ptr() as usize - block.as_ptr() as usize;
-        debug_assert!(overhead <= max_overhead);
-
-        let new_size = overhead + layout.size();
-        let new_size = (new_size + GRANULARITY - 1) & !(GRANULARITY - 1);
-        let new_size_and_flags;
-        debug_assert!(new_size <= search_size);
-
-        if new_size == size_and_flags & !SIZE_LAST_IN_POOL {
-            // The allocation completely fills this free block.
-            // Copy `SIZE_LAST_IN_POOL` if `size_and_flags` has one.
-            // Updating `next_phys_block.prev_phys_block` is unnecessary in this
-            // case because it's still `block`.
-            new_size_and_flags = size_and_flags;
-        } else {
-            // The allocation partially fills this free block. Create a new
-            // free block header at `block + new_size_and_flags..block +
-            // size_and_flags & SIZE_SIZE_MASK`. The new free block inherits
-            // `SIZE_LAST_IN_POOL` from `size_and_flags`.
-            let mut new_free_block: NonNull<FreeBlockHdr> =
-                NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-            let new_free_block_size_and_flags = size_and_flags - new_size;
-
-            // Update `next_phys_block.prev_phys_block` to point to the new
-            // free block
-            if let Some(mut next_phys_block) = next_phys_block {
-                // Invariant: No two adjacent free blocks
-                debug_assert!((next_phys_block.as_ref().size & SIZE_USED) != 0);
-
-                next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
+            // Unlink the free block. We are not using `unlink_free_block` because
+            // we already know `(fl, sl)` and that `block.prev_free` is `None`.
+            *first_free = block.as_ref().next_free;
+            if let Some(mut next_free) = *first_free {
+                next_free.as_mut().prev_free = None;
+            } else {
+                // The free list is now empty - update the bitmap
+                self.sl_bitmap[fl].clear_bit(sl as u32);
+                if self.sl_bitmap[fl] == SLBitmap::ZERO {
+                    self.fl_bitmap.clear_bit(fl as u32);
+                }
             }
 
-            debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
-            new_free_block.as_mut().common = BlockHdr {
-                size: new_free_block_size_and_flags,
-                prev_phys_block: Some(block.cast()),
-            };
-            self.link_free_block(
-                new_free_block,
-                new_free_block_size_and_flags & SIZE_SIZE_MASK,
+            // Decide the starting address of the payload
+            let unaligned_ptr = block.as_ptr() as *mut u8 as usize + mem::size_of::<UsedBlockHdr>();
+            let ptr = NonNull::new_unchecked(
+                (unaligned_ptr.wrapping_add(layout.align() - 1) & !(layout.align() - 1)) as *mut u8,
             );
 
-            // The new used block won't have `SIZE_LAST_IN_POOL`
-            new_size_and_flags = new_size;
+            if layout.align() < GRANULARITY {
+                debug_assert_eq!(unaligned_ptr, ptr.as_ptr() as usize);
+            } else {
+                debug_assert_ne!(unaligned_ptr, ptr.as_ptr() as usize);
+            }
+
+            // Place a header pointer (used by `used_block_hdr_for_allocation`)
+            if layout.align() >= GRANULARITY {
+                *ptr.cast::<NonNull<_>>().as_ptr().sub(1) = block;
+            }
+
+            // Calculate the actual overhead and block size
+            let overhead = ptr.as_ptr() as usize - block.as_ptr() as usize;
+            debug_assert!(overhead <= max_overhead);
+
+            let new_size = overhead + layout.size();
+            let new_size = (new_size + GRANULARITY - 1) & !(GRANULARITY - 1);
+            let new_size_and_flags;
+            debug_assert!(new_size <= search_size);
+
+            if new_size == size_and_flags & !SIZE_LAST_IN_POOL {
+                // The allocation completely fills this free block.
+                // Copy `SIZE_LAST_IN_POOL` if `size_and_flags` has one.
+                // Updating `next_phys_block.prev_phys_block` is unnecessary in this
+                // case because it's still `block`.
+                new_size_and_flags = size_and_flags;
+            } else {
+                // The allocation partially fills this free block. Create a new
+                // free block header at `block + new_size_and_flags..block +
+                // size_and_flags & SIZE_SIZE_MASK`. The new free block inherits
+                // `SIZE_LAST_IN_POOL` from `size_and_flags`.
+                let mut new_free_block: NonNull<FreeBlockHdr> =
+                    NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
+                let new_free_block_size_and_flags = size_and_flags - new_size;
+
+                // Update `next_phys_block.prev_phys_block` to point to the new
+                // free block
+                if let Some(mut next_phys_block) = next_phys_block {
+                    // Invariant: No two adjacent free blocks
+                    debug_assert!((next_phys_block.as_ref().size & SIZE_USED) != 0);
+
+                    next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
+                }
+
+                debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
+                new_free_block.as_mut().common = BlockHdr {
+                    size: new_free_block_size_and_flags,
+                    prev_phys_block: Some(block.cast()),
+                };
+                self.link_free_block(
+                    new_free_block,
+                    new_free_block_size_and_flags & SIZE_SIZE_MASK,
+                );
+
+                // The new used block won't have `SIZE_LAST_IN_POOL`
+                new_size_and_flags = new_size;
+            }
+
+            // Turn `block` into a used memory block and initialize the used block
+            // header. `prev_phys_block` is already set.
+            let mut block = block.cast::<UsedBlockHdr>();
+            block.as_mut().common.size = new_size_and_flags | SIZE_USED;
+
+            Some(ptr)
         }
-
-        // Turn `block` into a used memory block and initialize the used block
-        // header. `prev_phys_block` is already set.
-        let mut block = block.cast::<UsedBlockHdr>();
-        block.as_mut().common.size = new_size_and_flags | SIZE_USED;
-
-        Some(ptr)
     }
 
     /// Search for a non-empty free block list for allocation.
@@ -779,25 +763,18 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         }
 
         // Allocate a whole new memory block
-        let new_ptr = self.allocate_initializing_by(
-            new_layout,
-            #[inline]
-            |new_alloc| {
-                // TODO: Move this part out of the closure
-                debug_assert!(
-                    new_layout.size()
-                        >= (block.as_ref().common.size & SIZE_SIZE_MASK)
-                            - mem::size_of::<UsedBlockHdr>()
-                );
+        let new_ptr = self.allocate(new_layout)?;
 
-                // Move the existing data into the new location
-                core::ptr::copy_nonoverlapping(
-                    ptr.as_ptr(),
-                    new_alloc.as_ptr(),
-                    (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>(),
-                );
-            },
-        )?;
+        // Move the existing data into the new location
+        debug_assert!(
+            new_layout.size()
+                >= (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>()
+        );
+        core::ptr::copy_nonoverlapping(
+            ptr.as_ptr(),
+            new_ptr.as_ptr(),
+            (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>(),
+        );
 
         // Deallocate the old memory block.
         self.deallocate(ptr, new_layout.align());
