@@ -179,6 +179,29 @@ macro_rules! gen_test {
             }
 
             #[test]
+            fn ara() {
+                let _ = env_logger::builder().is_test(true).try_init();
+
+                let mut tlsf: TheTlsf = Tlsf::INIT;
+
+                let mut pool = Align([MaybeUninit::uninit(); 96]);
+                tlsf.insert_free_block(&mut pool.0);
+
+                log::trace!("tlsf = {:?}", tlsf);
+
+                let ptr = tlsf.allocate(Layout::from_size_align(17, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+
+                if let Some(ptr) = ptr {
+                    unsafe { tlsf.reallocate(ptr, Layout::from_size_align(0, 1).unwrap()) };
+                    log::trace!("ptr = {:?}", ptr);
+                }
+
+                let ptr = tlsf.allocate(Layout::from_size_align(0, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+            }
+
+            #[test]
             fn insert_free_block_ptr_near_end_fail() {
                 let mut tlsf: TheTlsf = Tlsf::INIT;
                 unsafe {
