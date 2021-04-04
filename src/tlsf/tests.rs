@@ -110,6 +110,30 @@ macro_rules! gen_test {
             }
 
             #[test]
+            fn adaa() {
+                let _ = env_logger::builder().is_test(true).try_init();
+
+                let mut tlsf: TheTlsf = Tlsf::INIT;
+
+                let mut pool = [MaybeUninit::uninit(); 65536];
+                tlsf.insert_free_block(&mut pool);
+
+                log::trace!("tlsf = {:?}", tlsf);
+
+                let ptr = tlsf.allocate(Layout::from_size_align(0, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+                if let Some(ptr) = ptr {
+                    unsafe { tlsf.deallocate(ptr, 1) };
+                }
+
+                let ptr = tlsf.allocate(Layout::from_size_align(0, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+
+                let ptr = tlsf.allocate(Layout::from_size_align(0, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+            }
+
+            #[test]
             fn insert_free_block_ptr_near_end_fail() {
                 let mut tlsf: TheTlsf = Tlsf::INIT;
                 unsafe {
