@@ -899,7 +899,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             block.as_mut().common.size = new_size | SIZE_USED;
         } else if new_size < old_size {
             // Shrink the block, creating a new free block at the end
-            let shrink_by = new_size - old_size;
+            let shrink_by = old_size - new_size;
 
             // We will create a new free block at this address
             let mut new_free_block: NonNull<FreeBlockHdr> =
