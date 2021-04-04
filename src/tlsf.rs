@@ -384,7 +384,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Round up the starting and ending addresses
         let unaligned_start = block.as_ptr() as *mut u8 as usize;
-        let start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
+        let mut start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
 
         // Calculate the new block length
         let mut size = if let Some(x) = len
@@ -421,6 +421,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             self.link_free_block(block, chunk_size);
 
             size -= chunk_size;
+            start += chunk_size;
         }
     }
 
