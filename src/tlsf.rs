@@ -62,6 +62,7 @@ use crate::int::BinInteger;
 #[derive(Debug)]
 pub struct Tlsf<'pool, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> {
     fl_bitmap: FLBitmap,
+    /// `sl_bitmap[fl].get_bit(sl)` is set iff `first_free[fl][sl].is_some()`
     sl_bitmap: [SLBitmap; FLLEN],
     first_free: [[Option<NonNull<FreeBlockHdr>>; SLLEN]; FLLEN],
     _phantom: PhantomData<&'pool mut ()>,
@@ -510,9 +511,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Unlink the free block. We are not using `unlink_free_block` because
         // we already know `(fl, sl)` and that `block.prev_free` is `None`.
-        if let Some(mut next_free) = block.as_ref().next_free {
+        *first_free = block.as_ref().next_free;
+        if let Some(mut next_free) = *first_free {
             next_free.as_mut().prev_free = None;
-            *first_free = Some(next_free);
         } else {
             // The free list is now empty - update the bitmap
             self.sl_bitmap[fl].clear_bit(sl as u32);
