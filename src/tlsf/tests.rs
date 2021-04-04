@@ -82,6 +82,9 @@ impl ShadowAllocator {
     }
 }
 
+#[repr(align(64))]
+struct Align<T>(T);
+
 macro_rules! gen_test {
     ($mod:ident, $($tt:tt)*) => {
         mod $mod {
@@ -137,17 +140,18 @@ macro_rules! gen_test {
             }
 
             #[quickcheck]
-            fn random(pool_size: usize, bytecode: Vec<u8>) {
-                random_inner(pool_size, bytecode);
+            fn random(pool_start: usize, pool_size: usize, bytecode: Vec<u8>) {
+                random_inner(pool_start, pool_size, bytecode);
             }
 
-            fn random_inner(pool_size: usize, bytecode: Vec<u8>) -> Option<()> {
+            fn random_inner(pool_start: usize, pool_size: usize, bytecode: Vec<u8>) -> Option<()> {
                 let mut sa = ShadowAllocator::new();
                 let mut tlsf: TheTlsf = Tlsf::INIT;
 
-                let mut pool = [MaybeUninit::uninit(); 65536];
-                let pool_size = pool_size % (pool.len() + 1);
-                let pool = &mut pool[0..pool_size ];
+                let mut pool = Align([MaybeUninit::uninit(); 65536]);
+                let pool_start = pool_start % 64;
+                let pool_size = pool_size % (pool.0.len() - 63);
+                let pool = &mut pool.0[pool_start..pool_start+pool_size ];
                 log::trace!("pool = {:p}: [u8; {}]", pool, pool.len());
                 sa.insert_free_block(pool);
                 tlsf.insert_free_block(pool);
