@@ -9,7 +9,19 @@ edition = "2018"
 svgbobdoc = { version = "0.2.2" }
 
 [dev-dependencies]
-quickcheck_macros = "0.9.1"
-quickcheck = "0.9.2"
-env_logger = "0.7.1"
+# TDOO: the following deps need `std`, which prevents the use of FarCri.rs
+# quickcheck_macros = "0.9.1"
+# quickcheck = "0.9.2"
+# env_logger = "0.7.1"
 log = "0.4.8"
+linked_list_allocator = "0.8.11"
+buddy-alloc = "0.4.1"
+
+[dev-dependencies.farcri]
+git = "https://github.com/yvt/farcri-rs.git"
+rev = "dbd6544d0411b8751871a6315ba4d8a08ca52d07"
+
+[[bench]]
+name = "stress"
+harness = false
+
