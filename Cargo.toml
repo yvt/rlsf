@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["yvt <i@yvt.jp>"]
 license = "MIT/Apache-2.0"
 edition = "2018"
+autobenches = false
 
 [dependencies]
 svgbobdoc = { version = "0.2.2" }
