@@ -1,3 +1,4 @@
+//! Benchmark for `rlsf` and some other allocators
 #![no_std]
 #![feature(const_maybe_uninit_assume_init)]
 #![feature(slice_ptr_len)]
@@ -10,7 +11,7 @@ use farcri::{criterion_group, criterion_main, Criterion};
 use rlsf::Tlsf;
 
 mod stress_common;
-use self::stress_common::bench_one;
+use self::stress_common::{bench_one, ARENA};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("noop", |b| b.iter(noop));
@@ -18,10 +19,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_one(
         c,
         "rlsf",
+        unsafe { ARENA.len() },
         #[allow(const_item_mutation)]
-        |arena| {
+        |arena_len| {
             let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
-            tlsf.insert_free_block(unsafe { &mut *arena });
+            let arena = unsafe { &mut ARENA[..arena_len] };
+            tlsf.insert_free_block(&mut *arena);
             tlsf
         },
         |tlsf, layout| tlsf.allocate(layout).unwrap(),
@@ -31,10 +34,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_one(
         c,
         "linked_list_allocator",
+        unsafe { ARENA.len() },
         #[allow(const_item_mutation)]
-        |arena| {
+        |arena_len| {
             let mut heap = linked_list_allocator::Heap::empty();
-            unsafe { heap.init(arena as *mut u8 as usize, arena.len()) };
+            let arena = unsafe { &mut ARENA[..arena_len] };
+            unsafe { heap.init(arena.as_ptr() as usize, arena.len()) };
             heap
         },
         |heap, layout| heap.allocate_first_fit(layout).unwrap(),
@@ -45,10 +50,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_one(
         c,
         "buddy_alloc",
+        unsafe { ARENA.len() },
         #[allow(const_item_mutation)]
-        |arena| unsafe {
+        |arena_len| unsafe {
+            let arena = &mut ARENA[..arena_len];
             buddy_alloc::BuddyAlloc::new(buddy_alloc::BuddyAllocParam::new(
-                arena as *const u8,
+                arena.as_ptr() as *const u8,
                 arena.len(),
                 16,
             ))
