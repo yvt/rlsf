@@ -18,6 +18,7 @@ log = "0.4.8"
 linked_list_allocator = "0.8.11"
 buddy-alloc = "0.4.1"
 wee_alloc = { version = "0.4.5", features = ["static_array_backend"] }
+dlmalloc = { version = "0.2.1" }
 
 [dev-dependencies.farcri]
 git = "https://github.com/yvt/farcri-rs.git"

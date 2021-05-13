@@ -6,7 +6,7 @@
 //       implementation detail
 #![cfg_attr(target_os = "none", no_main)]
 
-use core::ptr::NonNull;
+use core::{cell::Cell, ptr::NonNull};
 use farcri::{criterion_group, criterion_main, Criterion};
 use rlsf::Tlsf;
 
@@ -20,7 +20,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         c,
         "rlsf",
         unsafe { ARENA.len() },
-        #[allow(const_item_mutation)]
         |arena_len| {
             let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
             let arena = unsafe { &mut ARENA[..arena_len] };
@@ -35,7 +34,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         c,
         "linked_list_allocator",
         unsafe { ARENA.len() },
-        #[allow(const_item_mutation)]
         |arena_len| {
             let mut heap = linked_list_allocator::Heap::empty();
             let arena = unsafe { &mut ARENA[..arena_len] };
@@ -63,6 +61,81 @@ fn criterion_benchmark(c: &mut Criterion) {
         |heap, layout| NonNull::new(heap.malloc(layout.size())).unwrap(),
         |heap, p, _| heap.free(p.as_ptr()),
     );
+
+    bench_one(
+        c,
+        "dlmalloc",
+        unsafe { ARENA.len() - PAGE_SIZE },
+        #[allow(const_item_mutation)]
+        |arena_len| unsafe {
+            let arena = &mut ARENA[..arena_len];
+
+            dlmalloc::Dlmalloc::new_with_allocator(DlBumpAllocator::new(arena))
+        },
+        |heap, layout| unsafe { NonNull::new(heap.malloc(layout.size(), layout.align())).unwrap() },
+        |heap, p, layout| unsafe { heap.free(p.as_ptr(), layout.size(), layout.align()) },
+    );
+}
+
+struct DlBumpAllocator {
+    start_free: Cell<usize>,
+    end: usize,
+}
+
+const PAGE_SIZE: usize = 4096;
+
+impl DlBumpAllocator {
+    unsafe fn new(arena: *mut [core::mem::MaybeUninit<u8>]) -> Self {
+        let start = arena as *mut core::mem::MaybeUninit<u8> as usize;
+        let end = start + arena.len();
+        let start = (start + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
+        assert!(start < end);
+        Self {
+            start_free: Cell::new(start),
+            end,
+        }
+    }
+}
+
+unsafe impl dlmalloc::Allocator for DlBumpAllocator {
+    fn alloc(&self, size: usize) -> (*mut u8, usize, u32) {
+        let start_free = self.start_free.get();
+        let new_start_free = start_free.checked_add(size).filter(|&x| x <= self.end);
+        if let Some(new_start_free) = new_start_free {
+            log::debug!(
+                "DlBumpAllocator: allocated alloc({}) at {:?}",
+                size,
+                start_free,
+            );
+            self.start_free.set(new_start_free);
+            (start_free as *mut u8, size, 0)
+        } else {
+            log::debug!(
+                "DlBumpAllocator: alloc({}) failed; only {} bytes free",
+                size,
+                self.end - start_free,
+            );
+            (0 as _, 0, 0)
+        }
+    }
+    fn remap(&self, _ptr: *mut u8, _oldsize: usize, _newsize: usize, _can_move: bool) -> *mut u8 {
+        0 as _
+    }
+    fn free_part(&self, _ptr: *mut u8, _oldsize: usize, _newsize: usize) -> bool {
+        false
+    }
+    fn free(&self, _ptr: *mut u8, _size: usize) -> bool {
+        false
+    }
+    fn can_release_part(&self, _flags: u32) -> bool {
+        false
+    }
+    fn allocates_zeros(&self) -> bool {
+        true
+    }
+    fn page_size(&self) -> usize {
+        PAGE_SIZE
+    }
 }
 
 #[inline(never)]

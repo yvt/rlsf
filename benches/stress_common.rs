@@ -4,7 +4,7 @@ use farcri::{BenchmarkId, Criterion};
 
 /// The default arena, which `bench_one`'s caller can choose to use
 #[allow(dead_code)]
-pub static mut ARENA: [MaybeUninit<u8>; 1024 * 50] = unsafe { MaybeUninit::uninit().assume_init() };
+pub static mut ARENA: [MaybeUninit<u8>; 1024 * 70] = unsafe { MaybeUninit::uninit().assume_init() };
 
 static mut ALLOCS: [(NonNull<u8>, Layout); 256] = [(NonNull::dangling(), unsafe {
     Layout::from_size_align_unchecked(0, 1)
