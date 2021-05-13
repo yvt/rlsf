@@ -10,7 +10,10 @@ allocation algorithm¹.
  - **Allocation and deallocation operations are guaranteed to complete in
    constant time.** TLSF is suitable for real-time applications.
 
- - **The memory pool is provided by an application.** Examples of potential
+ - **Fast and small.** You can have both. It was found to be smaller and
+   faster² than three randomly chosen `no_std`-compatible allocator crates.
+
+ - **The memory pool is provided by an application³.** Examples of potential
    memory pool sources include: a `static` array for global memory
    allocation, a memory block allocated by another memory allocator for
    arena allocation.
@@ -24,6 +27,14 @@ allocation algorithm¹.
 memory allocator for real-time systems," *Proceedings. 16th Euromicro
 Conference on Real-Time Systems*, 2004. ECRTS 2004., Catania, Italy, 2004,
 pp. 79-88, doi: 10.1109/EMRTS.2004.1311009.</sub>
+
+<sub>² Compiled for and measured on a STM32F401 microcontroller using
+<a href="https://github.com/yvt/farcri-rs">FarCri.rs</a>.</sub>
+
+<sub>³ But rlsf can't return free memory blocks to the underlying memory
+system. If that's a problem, you should just use the default allocator
+(and keep the I-cache clean).
+</sub>
 
 ## Examples
 
