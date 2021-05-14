@@ -66,6 +66,15 @@ unsafe {
 }
 ```
 
+## Details
+
+### Changes from the Original Algorithm
+
+ - The end of each memory pool is capped by a sentinel block
+   (a permanently occupied block) instead of a normal block with a
+   last-block-in-pool flag. This simplifies the code a bit and improves
+   its worst-case performance and code size.
+
 
 ## License
 
