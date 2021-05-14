@@ -120,7 +120,7 @@ struct BlockHdr {
 const SIZE_USED: usize = 1;
 /// The bit of [`BlockHdr::size`] indicating whether the block is a sentinel
 /// (the last block in a memory pool) or not. If this bit is set, [`SIZE_USED`]
-/// must be set, too.
+/// must be set, too (`SIZE_SENTINEL ⟹ SIZE_USED`).
 const SIZE_SENTINEL: usize = 2;
 /// The bits of [`BlockHdr::size`] indicating the block's size.
 const SIZE_SIZE_MASK: usize = !((1 << GRANULARITY_LOG2) - 1);
@@ -503,14 +503,15 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             let search_size = search_size.checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1);
             let (fl, sl) = self.search_suitable_free_block_list_for_allocation(search_size)?;
 
-            // Get a free block
+            // Get a free block: `block`
             let first_free = &mut self.first_free[fl][sl];
             let block = first_free.unwrap_or_else(|| unreachable_unchecked());
             let mut next_phys_block = block.as_ref().common.next_phys_block();
             let size_and_flags = block.as_ref().common.size;
+            let size = size_and_flags /* size_and_flags & SIZE_SIZE_MASK */;
+            debug_assert_eq!(size, size_and_flags & SIZE_SIZE_MASK);
 
-            debug_assert!((block.as_ref().common.size & SIZE_USED) == 0);
-            debug_assert!((block.as_ref().common.size & SIZE_SIZE_MASK) >= search_size);
+            debug_assert!(size >= search_size);
 
             // Unlink the free block. We are not using `unlink_free_block` because
             // we already know `(fl, sl)` and that `block.prev_free` is `None`.
@@ -542,55 +543,45 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 *ptr.cast::<NonNull<_>>().as_ptr().sub(1) = block;
             }
 
-            // Calculate the actual overhead and block size
+            // Calculate the actual overhead and the final block size of the
+            // used block being created here
             let overhead = ptr.as_ptr() as usize - block.as_ptr() as usize;
             debug_assert!(overhead <= max_overhead);
 
             let new_size = overhead + layout.size();
             let new_size = (new_size + GRANULARITY - 1) & !(GRANULARITY - 1);
-            let new_size_and_flags;
             debug_assert!(new_size <= search_size);
 
-            if new_size == size_and_flags {
+            if new_size == size {
                 // The allocation completely fills this free block.
-                // Copy `SIZE_LAST_IN_POOL` if `size_and_flags` has one.
                 // Updating `next_phys_block.prev_phys_block` is unnecessary in this
-                // case because it's still `block`.
-                new_size_and_flags = size_and_flags;
+                // case because it's still supposed to point to `block`.
             } else {
                 // The allocation partially fills this free block. Create a new
-                // free block header at `block + new_size_and_flags..block +
-                // size_and_flags & SIZE_SIZE_MASK`. The new free block inherits
-                // `SIZE_LAST_IN_POOL` from `size_and_flags`.
+                // free block header at `block + new_size..block + size`
+                // of length (`new_free_block_size`).
                 let mut new_free_block: NonNull<FreeBlockHdr> =
                     NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-                let new_free_block_size_and_flags = size_and_flags - new_size;
+                let new_free_block_size = size - new_size;
 
-                // Update `next_phys_block.prev_phys_block` to point to the new
+                // Update `next_phys_block.prev_phys_block` to point to this new
                 // free block
                 // Invariant: No two adjacent free blocks
                 debug_assert!((next_phys_block.as_ref().size & SIZE_USED) != 0);
                 next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
 
                 // Create the new free block header
-                debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
                 new_free_block.as_mut().common = BlockHdr {
-                    size: new_free_block_size_and_flags,
+                    size: new_free_block_size,
                     prev_phys_block: Some(block.cast()),
                 };
-                self.link_free_block(
-                    new_free_block,
-                    new_free_block_size_and_flags & SIZE_SIZE_MASK,
-                );
-
-                // The new used block won't have `SIZE_LAST_IN_POOL`
-                new_size_and_flags = new_size;
+                self.link_free_block(new_free_block, new_free_block_size);
             }
 
             // Turn `block` into a used memory block and initialize the used block
             // header. `prev_phys_block` is already set.
             let mut block = block.cast::<UsedBlockHdr>();
-            block.as_mut().common.size = new_size_and_flags | SIZE_USED;
+            block.as_mut().common.size = new_size | SIZE_USED;
 
             Some(ptr)
         }
@@ -679,8 +670,14 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // Merge with the next block if it's a free block
         // Safety: `block.common` should be fully up-to-date and valid
         let next_phys_block = block.as_ref().next_phys_block();
-        let next_phys_block_size = next_phys_block.as_ref().size;
-        if (next_phys_block_size & SIZE_USED) == 0 {
+        let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
+        if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
+            let next_phys_block_size = next_phys_block_size_and_flags;
+            debug_assert_eq!(
+                next_phys_block_size_and_flags & SIZE_SIZE_MASK,
+                next_phys_block_size
+            );
+
             // It's coalescable. Add its size to `size`. This will transfer
             // any `SIZE_LAST_IN_POOL` flag `next_phys_block` may have at
             // the same time.
@@ -691,24 +688,26 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             new_next_phys_block = next_phys_block.as_ref().next_phys_block();
 
             // Unlink `next_phys_block`.
-            self.unlink_free_block(
-                next_phys_block.cast(),
-                next_phys_block_size & SIZE_SIZE_MASK,
-            );
+            self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
         } else {
             new_next_phys_block = next_phys_block;
         }
 
         // Merge with the previous block if it's a free block.
         if let Some(prev_phys_block) = block.as_ref().prev_phys_block {
-            let prev_phys_block_size = prev_phys_block.as_ref().size;
+            let prev_phys_block_size_and_flags = prev_phys_block.as_ref().size;
 
-            if (prev_phys_block_size & SIZE_USED) == 0 {
+            if (prev_phys_block_size_and_flags & SIZE_USED) == 0 {
+                let prev_phys_block_size = prev_phys_block_size_and_flags;
+                debug_assert_eq!(
+                    prev_phys_block_size_and_flags & SIZE_SIZE_MASK,
+                    prev_phys_block_size
+                );
+
                 // It's coalescable. Add its size to `size`.
                 size += prev_phys_block_size;
 
                 // Unlink `prev_phys_block`.
-                debug_assert_eq!(prev_phys_block_size & SIZE_SIZE_MASK, prev_phys_block_size);
                 self.unlink_free_block(prev_phys_block.cast(), prev_phys_block_size);
 
                 // Move `block` to where `prev_phys_block` is located. By doing
@@ -767,15 +766,16 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // Allocate a whole new memory block
         let new_ptr = self.allocate(new_layout)?;
 
+        // This subtraction can be fused with `- mem::size_of::<UsedBlockHdr>()`
+        let old_size = block.as_ref().common.size - SIZE_USED;
+        debug_assert_eq!(old_size, block.as_ref().common.size & SIZE_SIZE_MASK);
+
         // Move the existing data into the new location
-        debug_assert!(
-            new_layout.size()
-                >= (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>()
-        );
+        debug_assert!(new_layout.size() >= old_size - mem::size_of::<UsedBlockHdr>());
         core::ptr::copy_nonoverlapping(
             ptr.as_ptr(),
             new_ptr.as_ptr(),
-            (block.as_ref().common.size & SIZE_SIZE_MASK) - mem::size_of::<UsedBlockHdr>(),
+            old_size - mem::size_of::<UsedBlockHdr>(),
         );
 
         // Deallocate the old memory block.
@@ -819,18 +819,22 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 // We will create a new free block at this address
                 let mut new_free_block: NonNull<FreeBlockHdr> =
                     NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-                let mut new_free_block_size_and_flags = shrink_by;
+                let mut new_free_block_size = shrink_by;
 
                 // If the next block is a free block...
                 let mut next_phys_block = block.as_ref().common.next_phys_block();
                 let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
-                let next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
                 if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
+                    let next_phys_block_size = next_phys_block_size_and_flags;
+                    debug_assert_eq!(
+                        next_phys_block_size,
+                        next_phys_block_size_and_flags & SIZE_SIZE_MASK
+                    );
+
                     // Then we can merge this existing free block (`next_phys_block`)
-                    // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
-                    // as well if `next_phys_block` has one.
+                    // into the new one (`new_free_block`).
                     self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
-                    new_free_block_size_and_flags += next_phys_block_size_and_flags;
+                    new_free_block_size += next_phys_block_size;
 
                     let mut next_next_phys_block = next_phys_block.as_ref().next_phys_block();
                     next_next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
@@ -840,15 +844,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                     next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
                 }
 
-                debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
                 new_free_block.as_mut().common = BlockHdr {
-                    size: new_free_block_size_and_flags,
+                    size: new_free_block_size,
                     prev_phys_block: Some(block.cast()),
                 };
-                self.link_free_block(
-                    new_free_block,
-                    new_free_block_size_and_flags & SIZE_SIZE_MASK,
-                );
+                self.link_free_block(new_free_block, new_free_block_size);
 
                 block.as_mut().common.size = new_size | SIZE_USED;
             }
@@ -871,13 +871,18 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Grow into the next free block. Fail if there isn't such a block.
         'nonmoving: loop {
-            let mut next_phys_block_size_and_flags = next_phys_block.as_ref().size;
-            let mut next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
+            let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
 
             // Fail it isn't a free block.
             if (next_phys_block_size_and_flags & SIZE_USED) != 0 {
                 break 'nonmoving;
             }
+
+            let mut next_phys_block_size = next_phys_block_size_and_flags;
+            debug_assert_eq!(
+                next_phys_block_size,
+                next_phys_block_size_and_flags & SIZE_SIZE_MASK
+            );
 
             // Now we know it's really a free block.
             let mut next_phys_block = next_phys_block.cast::<FreeBlockHdr>();
@@ -894,16 +899,14 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             self.unlink_free_block(next_phys_block, next_phys_block_size);
 
             if grow_by < next_phys_block_size {
-                // Can fit and there's some slack. Create a free block, which
-                // will inherit the original free block's `SIZE_LAST_IN_POOL`.
-                next_phys_block_size_and_flags -= grow_by;
+                // Can fit and there's some slack. Create a free block to fill
+                // the slack.
                 next_phys_block_size -= grow_by;
 
                 next_phys_block =
                     NonNull::new_unchecked(block.cast::<u8>().as_ptr().add(new_size)).cast();
-                debug_assert!((next_phys_block_size_and_flags & SIZE_USED) == 0);
                 next_phys_block.as_mut().common = BlockHdr {
-                    size: next_phys_block_size_and_flags,
+                    size: next_phys_block_size,
                     prev_phys_block: Some(block.cast()),
                 };
                 self.link_free_block(next_phys_block, next_phys_block_size);
@@ -932,12 +935,17 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // approach will not improve the situation anyway, so return `None`.
         let prev_phys_block = block.as_ref().common.prev_phys_block?;
         let prev_phys_block_size_and_flags = prev_phys_block.as_ref().size;
-        let prev_phys_block_size = prev_phys_block_size_and_flags & SIZE_SIZE_MASK;
 
         // Fail it isn't a free block.
         if (prev_phys_block_size_and_flags & SIZE_USED) != 0 {
             return None;
         }
+
+        let prev_phys_block_size = prev_phys_block_size_and_flags;
+        debug_assert_eq!(
+            prev_phys_block_size,
+            prev_phys_block_size_and_flags & SIZE_SIZE_MASK
+        );
 
         // Now we know it's really a free block.
         moving_clearance += prev_phys_block_size;
@@ -961,8 +969,12 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // Unlink the existing free blocks included in `moving_clearance`
         self.unlink_free_block(prev_phys_block.cast(), prev_phys_block_size);
         let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
-        let next_phys_block_size = next_phys_block_size_and_flags & SIZE_SIZE_MASK;
         if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
+            let next_phys_block_size = next_phys_block_size_and_flags;
+            debug_assert_eq!(
+                next_phys_block_size,
+                next_phys_block_size_and_flags & SIZE_SIZE_MASK
+            );
             self.unlink_free_block(next_phys_block.cast(), next_phys_block_size);
         }
 
@@ -975,12 +987,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // We'll replace `prev_phys_block` with a new used block.
         let mut new_block = prev_phys_block.cast::<UsedBlockHdr>();
-        let new_size_and_flags;
 
         if new_size == moving_clearance {
             // The allocation completely fills this free block.
-            new_size_and_flags = new_size;
-
             // Update `prev_phys_block` accordingly
             moving_clearance_end.as_mut().prev_phys_block = Some(new_block.cast());
         } else {
@@ -989,18 +998,21 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             // + moving_clearance`.
             let mut new_free_block: NonNull<FreeBlockHdr> =
                 NonNull::new_unchecked(new_block.cast::<u8>().as_ptr().add(new_size)).cast();
-            let new_free_block_size = moving_clearance - new_size;
-            let mut new_free_block_size_and_flags = new_free_block_size;
+            let mut new_free_block_size = moving_clearance - new_size;
 
             // If the next block is a free block...
             let moving_clearance_end_size_and_flags = moving_clearance_end.as_ref().size;
-            let moving_clearance_end_size = moving_clearance_end_size_and_flags & SIZE_SIZE_MASK;
             if (moving_clearance_end_size_and_flags & SIZE_USED) == 0 {
+                let moving_clearance_end_size = moving_clearance_end_size_and_flags;
+                debug_assert_eq!(
+                    moving_clearance_end_size,
+                    moving_clearance_end_size_and_flags & SIZE_SIZE_MASK
+                );
+
                 // Then we can merge this existing free block (`moving_clearance_end`)
-                // into the new one (`new_free_block`). Copy `SIZE_LAST_IN_POOL`
-                // as well if `moving_clearance_end` has one.
+                // into the new one (`new_free_block`).
                 self.unlink_free_block(moving_clearance_end.cast(), moving_clearance_end_size);
-                new_free_block_size_and_flags += moving_clearance_end_size_and_flags;
+                new_free_block_size += moving_clearance_end_size_and_flags;
 
                 let mut next_next_phys_block = moving_clearance_end.as_ref().next_phys_block();
                 next_next_phys_block.as_mut().prev_phys_block = Some(new_free_block.cast());
@@ -1010,20 +1022,16 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 moving_clearance_end.as_mut().prev_phys_block = Some(new_free_block.cast());
             }
 
-            debug_assert!((new_free_block_size_and_flags & SIZE_USED) == 0);
             new_free_block.as_mut().common = BlockHdr {
-                size: new_free_block_size_and_flags,
+                size: new_free_block_size,
                 prev_phys_block: Some(new_block.cast()),
             };
             self.link_free_block(new_free_block, new_free_block_size);
-
-            // The new used block won't have `SIZE_LAST_IN_POOL`
-            new_size_and_flags = new_size;
         }
 
         // Turn `new_block` into a used memory block and initialize the used block
         // header. `prev_phys_block` is already set.
-        new_block.as_mut().common.size = new_size_and_flags | SIZE_USED;
+        new_block.as_mut().common.size = new_size | SIZE_USED;
 
         // Place a header pointer (used by `used_block_hdr_for_allocation`)
         if new_layout.align() >= GRANULARITY {
