@@ -391,9 +391,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         }
     }
 
-    /// Insert a new free memory block specified by a slice pointer.
+    /// Create a new memory pool at the location specified by a slice pointer.
     ///
-    /// This method does nothing if the given memory block is too small.
+    /// Returns the actual (rounded down) address range of the created memory
+    /// pool.
+    ///
+    /// This method does nothing and returns `None` if the given memory block is
+    /// too small.
     ///
     /// # Time Complexity
     ///
@@ -421,7 +425,10 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Panics
     ///
     /// This method never panics.
-    pub unsafe fn insert_free_block_ptr(&mut self, block: NonNull<[u8]>) {
+    pub unsafe fn insert_free_block_ptr(
+        &mut self,
+        block: NonNull<[u8]>,
+    ) -> Option<[NonNull<u8>; 2]> {
         // FIXME: Use `NonNull<[T]>::len` when it's stable
         //        <https://github.com/rust-lang/rust/issues/71146>
         // Safety: We are just reading the slice length embedded in the fat
@@ -432,7 +439,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Round up the starting and ending addresses
         let unaligned_start = block.as_ptr() as *mut u8 as usize;
-        let mut start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
+        let start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
 
         // Calculate the new block length
         let mut size = if let Some(x) = len
@@ -443,8 +450,10 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             x & !(GRANULARITY - 1)
         } else {
             // The block is too small
-            return;
+            return None;
         };
+
+        let mut cursor = start;
 
         while size >= GRANULARITY * 2 {
             let chunk_size = if let Some(max_pool_size) = Self::MAX_POOL_SIZE {
@@ -456,8 +465,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             debug_assert_eq!(chunk_size % GRANULARITY, 0);
 
             // The new free block
-            // Safety: `start` is not zero.
-            let mut block = NonNull::new_unchecked(start as *mut FreeBlockHdr);
+            // Safety: `cursor` is not zero.
+            let mut block = NonNull::new_unchecked(cursor as *mut FreeBlockHdr);
 
             // Initialize the new free block
             block.as_mut().common = BlockHdr {
@@ -481,11 +490,87 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             self.link_free_block(block, chunk_size - GRANULARITY);
 
             size -= chunk_size;
-            start += chunk_size;
+            cursor += chunk_size;
+        }
+
+        // Safety: Neither `start` nor `cursor` are zero.
+        Some([
+            NonNull::new_unchecked(start as _),
+            NonNull::new_unchecked(cursor as _),
+        ])
+    }
+
+    /// Extend an existing memory pool by incorporating the specified memory
+    /// block.
+    ///
+    /// Returns the new end address of the extended memory pool.
+    ///
+    /// # Time Complexity
+    ///
+    /// This method will complete in linear time (`O(block.len())`) because
+    /// it might need to divide the memory block to meet the maximum block size
+    /// requirement (`(GRANULARITY << FLLEN) - GRANULARITY`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rlsf::Tlsf;
+    /// use std::{mem::MaybeUninit, ptr::NonNull};
+    /// static mut POOL: [MaybeUninit<[u8; 1024]>; 3] = [MaybeUninit::uninit(); 3];
+    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let [pool0_start, pool0_end] = unsafe {
+    ///     tlsf.insert_free_block_ptr(NonNull::new(POOL[0].as_mut_ptr()).unwrap())
+    /// }.unwrap();
+    /// let pool1_end = unsafe {
+    ///     let pool1_end = POOL[1].as_mut_ptr() as usize + 1024;
+    ///     tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
+    ///         pool0_end,
+    ///         pool1_end - pool0_end.as_ptr() as usize,
+    ///     ))
+    /// };
+    /// let _pool2_end = unsafe {
+    ///     let pool2_end = POOL[2].as_mut_ptr() as usize + 1024;
+    ///     tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
+    ///         pool1_end,
+    ///         pool2_end - pool1_end.as_ptr() as usize,
+    ///     ))
+    /// };
+    ///
+    /// // polyfill for <https://github.com/rust-lang/rust/issues/71941>
+    /// fn nonnull_slice_from_raw_parts<T>(ptr: NonNull<T>, len: usize) -> NonNull<[T]> {
+    ///     NonNull::new(std::ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len)).unwrap()
+    /// }
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// The memory block will be considered owned by `self`. The memory block
+    /// must outlive `self`.
+    ///
+    /// `block`'s starting address must match an existing memory pool's
+    /// ending address (the second return value of
+    /// [`Self::insert_free_block`]`[`[`_ptr`](Self::insert_free_block_ptr)`]`
+    /// or the return value of `append_free_block_ptr`).
+    ///
+    /// # Panics
+    ///
+    /// This method never panics.
+    pub unsafe fn append_free_block_ptr(&mut self, block: NonNull<[u8]>) -> NonNull<u8> {
+        // TODO: coalesce the last free block of the previous memory pool
+        if let Some([_, end]) = self.insert_free_block_ptr(block) {
+            end
+        } else {
+            // Safety: `NonNull::as_ptr()` never returns a null pointer
+            NonNull::new_unchecked(block.as_ptr() as _)
         }
     }
 
-    /// Insert a new free memory block specified by a slice.
+    /// Create a new memory pool at the location specified by a slice.
+    ///
+    /// Returns the actual (rounded down) location of the created memory pool.
+    ///
+    /// This method does nothing and returns `None` if the given memory block is
+    /// too small.
     ///
     /// # Time Complexity
     ///
@@ -517,10 +602,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///
     /// This method never panics.
     #[inline]
-    pub fn insert_free_block(&mut self, block: &'pool mut [MaybeUninit<u8>]) {
+    pub fn insert_free_block(
+        &mut self,
+        block: &'pool mut [MaybeUninit<u8>],
+    ) -> Option<[NonNull<u8>; 2]> {
         // Safety: `block` is a mutable reference, which guarantees the absence
         // of aliasing references. Being `'pool` means it will outlive `self`.
-        unsafe { self.insert_free_block_ptr(NonNull::new(block as *mut [_] as _).unwrap()) };
+        unsafe { self.insert_free_block_ptr(NonNull::new(block as *mut [_] as _).unwrap()) }
     }
 
     /// Calculate the minimum size of a `GRANULARITY`-byte aligned memory pool
