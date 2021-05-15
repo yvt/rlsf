@@ -1,7 +1,7 @@
 extern crate std;
 
 use quickcheck_macros::quickcheck;
-use std::{collections::BTreeMap, ops::Range, prelude::v1::*};
+use std::{collections::BTreeMap, mem::MaybeUninit, ops::Range, prelude::v1::*};
 
 use super::*;
 
@@ -333,6 +333,108 @@ macro_rules! gen_test {
                     assert_eq!(TheTlsf::map_floor(mps), None);
                 }
             }
+
+            #[quickcheck]
+            fn map_ceil_and_unmap(size: usize, shift: u32) -> quickcheck::TestResult {
+                let size = size.rotate_left(shift % super::USIZE_BITS)
+                    .wrapping_mul(super::GRANULARITY);
+                if size == 0 {
+                    return quickcheck::TestResult::discard();
+                }
+                let list_min_size = TheTlsf::map_ceil_and_unmap(size);
+                log::debug!("map_ceil_and_unmap({}) = {:?}", size, list_min_size);
+                if let Some(list_min_size) = list_min_size {
+                    assert!(list_min_size >= size);
+
+                    // `list_min_size` must be the lower bound of some list
+                    let (fl, sl) = TheTlsf::map_floor(list_min_size).unwrap();
+                    log::debug!("map_floor({}) = {:?}", list_min_size, (fl, sl));
+
+                    // Since `list_min_size` is the lower bound of some list,
+                    // `map_floor(list_min_size)` and `map_ceil(list_min_size)`
+                    // should both return this list
+                    assert_eq!(TheTlsf::map_floor(list_min_size), TheTlsf::map_ceil(list_min_size));
+
+                    // `map_ceil_and_unmap(size)` must be the lower bound of the
+                    // list returned by `map_ceil(size)`
+                    assert_eq!(TheTlsf::map_floor(list_min_size), TheTlsf::map_ceil(size));
+                } else {
+                    // Find an explanation for `map_ceil_and_unmap` returning
+                    // `None`
+                    if let Some((fl, _sl)) = TheTlsf::map_ceil(size) {
+                        // The lower bound of `(fl, sl)` is not representable
+                        // in `usize` - this should be why
+                        assert!(fl as u32 + super::GRANULARITY_LOG2 >= super::USIZE_BITS);
+                    } else {
+                        // `map_ceil_and_unmap` is `map_ceil` + infallible
+                        // reverse mapping, and the suboperation `map_ceil`
+                        // failed
+                    }
+                }
+
+                quickcheck::TestResult::passed()
+            }
+
+            #[quickcheck]
+            fn map_ceil_and_unmap_huge(shift: u32) -> quickcheck::TestResult {
+                let size = usize::MAX <<
+                    (shift % (super::USIZE_BITS - super::GRANULARITY_LOG2)
+                        + super::GRANULARITY_LOG2);
+
+                if size == 0 || TheTlsf::map_ceil(size).is_some() {
+                    return quickcheck::TestResult::discard();
+                }
+
+                // If `map_ceil` returns `None`, `map_ceil_and_unmap` must
+                // return `None`, too.
+                assert_eq!(TheTlsf::map_ceil_and_unmap(size), None);
+                quickcheck::TestResult::passed()
+            }
+
+            #[quickcheck]
+            fn pool_size_to_contain_allocation(size: usize, align: u32)-> quickcheck::TestResult {
+                let align = (super::GRANULARITY / 2) << (align % 5);
+                let size = size.wrapping_mul(align);
+                if size > 500_000 {
+                    // Let's limit pool size
+                    return quickcheck::TestResult::discard();
+                }
+
+                let layout = Layout::from_size_align(size, align).unwrap();
+                log::debug!("layout = {:?}", layout);
+
+                let pool_size = if let Some(x) = TheTlsf::pool_size_to_contain_allocation(layout) {
+                    x
+                } else {
+                    return quickcheck::TestResult::discard();
+                };
+                log::debug!("pool_size_to_contain_allocation = {:?}", pool_size);
+
+                assert_eq!(pool_size % super::GRANULARITY, 0);
+
+                // Create a well-aligned pool
+                type Bk = Align<[u8; 64]>;
+                assert_eq!(std::mem::size_of::<Bk>(), 64);
+                assert_eq!(std::mem::align_of::<Bk>(), 64);
+                let mut pool: Vec<MaybeUninit<Bk>> = Vec::new();
+                pool.reserve((pool_size + 63) / 64);
+                let pool = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        pool.as_mut_ptr() as *mut MaybeUninit<u8>,
+                        pool_size,
+                    )
+                };
+
+                let mut tlsf: TheTlsf = Tlsf::INIT;
+                tlsf.insert_free_block(pool);
+
+                // The allocation should success because
+                // `pool_size_to_contain_allocation` said so
+                tlsf.allocate(layout)
+                    .expect("allocation unexpectedly failed");
+
+                quickcheck::TestResult::passed()
+            }
         }
     };
 }
@@ -358,3 +460,12 @@ gen_test!(tlsf_u16_u32_3_32, u16, u32, 3, 32);
 gen_test!(tlsf_u16_u32_11_32, u16, u32, 11, 32);
 gen_test!(tlsf_u16_u32_16_32, u16, u32, 16, 32);
 gen_test!(tlsf_u32_u32_20_32, u32, u32, 20, 32);
+gen_test!(tlsf_u32_u32_27_32, u32, u32, 27, 32);
+gen_test!(tlsf_u32_u32_28_32, u32, u32, 28, 32);
+gen_test!(tlsf_u32_u32_29_32, u32, u32, 29, 32);
+gen_test!(tlsf_u32_u32_32_32, u32, u32, 32, 32);
+gen_test!(tlsf_u64_u8_58_64, u64, u64, 58, 8);
+gen_test!(tlsf_u64_u8_59_64, u64, u64, 59, 8);
+gen_test!(tlsf_u64_u8_60_64, u64, u64, 60, 8);
+gen_test!(tlsf_u64_u8_61_64, u64, u64, 61, 8);
+gen_test!(tlsf_u64_u8_64_64, u64, u64, 64, 8);
