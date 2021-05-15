@@ -323,6 +323,16 @@ macro_rules! gen_test {
                     }
                 }
             }
+
+            #[test]
+            fn max_pool_size() {
+                if let Some(mps) = TheTlsf::MAX_POOL_SIZE {
+                    // `MAX_POOL_SIZE - super::GRANULARITY` should
+                    // be the maximum allowed block size.
+                    assert!(TheTlsf::map_floor(mps - super::GRANULARITY).is_some());
+                    assert_eq!(TheTlsf::map_floor(mps), None);
+                }
+            }
         }
     };
 }
