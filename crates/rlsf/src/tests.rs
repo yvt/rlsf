@@ -1,7 +1,6 @@
-extern crate std;
-
 use std::{alloc::Layout, collections::BTreeMap, ops::Range, ptr::NonNull};
 
+#[derive(Debug)]
 pub struct ShadowAllocator {
     regions: BTreeMap<usize, SaRegion>,
 }
@@ -11,6 +10,12 @@ pub enum SaRegion {
     Free,
     Used,
     Invalid,
+}
+
+impl Default for ShadowAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ShadowAllocator {
@@ -81,6 +86,24 @@ impl ShadowAllocator {
             SaRegion::Invalid,
             SaRegion::Free,
         );
+    }
+
+    pub fn append_free_block(&mut self, start: NonNull<u8>, end: NonNull<u8>) {
+        let mut it = self.regions.range(0..=start.as_ptr() as usize).rev();
+
+        assert_eq!(
+            it.next(),
+            Some((&(start.as_ptr() as usize), &SaRegion::Invalid)),
+            "no boundary at `start`"
+        );
+
+        assert_ne!(
+            it.next().expect("no previous allocation to append to").1,
+            &SaRegion::Invalid,
+            "no previous allocation to append to"
+        );
+
+        self.insert_free_block(start, end);
     }
 
     pub fn allocate(&mut self, layout: Layout, start: NonNull<u8>) {

@@ -1,5 +1,3 @@
-extern crate std;
-
 use quickcheck_macros::quickcheck;
 use std::{mem::MaybeUninit, prelude::v1::*};
 

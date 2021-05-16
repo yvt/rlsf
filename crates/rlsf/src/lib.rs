@@ -82,9 +82,18 @@ macro_rules! const_panic {
     };
 }
 
+mod flex;
+mod init;
 pub mod int;
 mod tlsf;
-pub use self::tlsf::{Tlsf, GRANULARITY};
+pub use self::{
+    flex::*,
+    init::*,
+    tlsf::{Tlsf, GRANULARITY},
+};
+
+#[cfg(any(test, feature = "std"))]
+extern crate std;
 
 #[cfg(test)]
 mod tests;
