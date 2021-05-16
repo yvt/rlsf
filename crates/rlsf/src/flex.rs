@@ -1,7 +1,13 @@
 //! An allocator with flexible backing stores
 use core::{alloc::Layout, debug_assert, ptr::NonNull, unimplemented};
 
-use super::{int::BinInteger, Init, Tlsf, GRANULARITY};
+use super::{
+    int::BinInteger,
+    utils::{
+        nonnull_slice_end, nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start,
+    },
+    Init, Tlsf, GRANULARITY,
+};
 
 /// The trait for dynamic storage allocators that can back [`FlexTlsf`].
 pub unsafe trait FlexSource {
@@ -14,26 +20,26 @@ pub unsafe trait FlexSource {
     /// `min_size` must be a multiple of [`GRANULARITY`]. `min_size` must not
     /// be zero.
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<[NonNull<u8>; 2]> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
         let _ = min_size;
         None
     }
 
     /// Attempt to grow the specified allocation without moving it. Returns
-    /// the memory allocation's end address on success.
+    /// the final allocation size (which must be greater than or equal to
+    /// `min_new_len`) on success.
     ///
     /// # Safety
     ///
-    /// `[start, old_end]` must be an existing allocation made by this
-    /// allocator. `min_new_end` must be greater than or equal to `old_end`.
+    /// `ptr` must be an existing allocation made by this
+    /// allocator. `min_new_len` must be greater than or equal to `ptr.len()`.
     #[inline]
     unsafe fn realloc_inplace_grow(
         &mut self,
-        start: NonNull<u8>,
-        old_end: NonNull<u8>,
-        min_new_end: NonNull<u8>,
-    ) -> Option<NonNull<u8>> {
-        let _ = (start, old_end, min_new_end);
+        ptr: NonNull<[u8]>,
+        min_new_len: usize,
+    ) -> Option<usize> {
+        let _ = (ptr, min_new_len);
         None
     }
 
@@ -41,11 +47,10 @@ pub unsafe trait FlexSource {
     ///
     /// # Safety
     ///
-    /// `[start, end]` must denote an existing allocation made by this
-    /// allocator.
+    /// `ptr` must denote an existing allocation made by this allocator.
     #[inline]
-    unsafe fn dealloc(&mut self, [start, end]: [NonNull<u8>; 2]) {
-        let _ = [start, end];
+    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
+        let _ = ptr;
         unimplemented!("`supports_dealloc` returned `true`, but `dealloc` is not implemented");
     }
 
@@ -96,32 +101,24 @@ unsafe impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> FlexSource
     for GlobalAllocAsFlexSource<T, ALIGN>
 {
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<[NonNull<u8>; 2]> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
         let layout = Layout::from_size_align(min_size, Self::ALIGN)
             .ok()?
             .pad_to_align();
         // Safety: The caller upholds that `min_size` is not zero
         let start = self.0.alloc(layout);
         let start = NonNull::new(start)?;
-        let end = if let Some(x) = NonNull::new(start.as_ptr().wrapping_add(layout.size())) {
-            x
-        } else {
-            unimplemented!()
-        };
-        Some([start, end])
+        Some(nonnull_slice_from_raw_parts(start, layout.size()))
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, [start, end]: [NonNull<u8>; 2]) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         // Safety: This layout was previously used for allocation, during which
         //         the layout was checked for validity
-        let layout = Layout::from_size_align_unchecked(
-            end.as_ptr() as usize - start.as_ptr() as usize,
-            Self::ALIGN,
-        );
+        let layout = Layout::from_size_align_unchecked(nonnull_slice_len(ptr), Self::ALIGN);
 
         // Safety: `start` denotes an existing allocation with layout `layout`
-        self.0.dealloc(start.as_ptr(), layout);
+        self.0.dealloc(ptr.as_ptr() as _, layout);
     }
 
     fn supports_dealloc(&self) -> bool {
@@ -149,11 +146,11 @@ pub struct FlexTlsf<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, 
 struct Pool {
     /// The starting address of the memory allocation.
     alloc_start: NonNull<u8>,
-    /// The ending address of the memory allocation.
-    alloc_end: NonNull<u8>,
-    /// The ending address of the memory pool created within the allocation.
-    /// This might be slightly less than `alloc_end`.
-    pool_end: NonNull<u8>,
+    /// The length of the memory allocation.
+    alloc_len: usize,
+    /// The length of the memory pool created within the allocation.
+    /// This might be slightly less than `alloc_len`.
+    pool_len: usize,
 }
 
 // Safety: `Pool` is totally thread-safe
@@ -169,11 +166,8 @@ unsafe impl Sync for Pool {}
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct PoolFtr {
-    /// The previous allocation's end address. Forms a singly-linked list.
-    prev_alloc_end: Option<NonNull<u8>>,
-    /// This allocation's start address. It's uninitialized while the allocation
-    /// is in `FlexTlsf::growable_pool`.
-    alloc_start: NonNull<u8>,
+    /// The previous allocation. Forms a singly-linked list.
+    prev_alloc: Option<NonNull<[u8]>>,
 }
 
 const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
@@ -183,10 +177,9 @@ const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
 impl PoolFtr {
     /// Get a pointer to `PoolFtr` for a given allocation.
     #[inline]
-    fn get_for_alloc_end(alloc_end: NonNull<u8>, alloc_align: usize) -> *mut Self {
-        let mut ptr = alloc_end
-            .as_ptr()
-            .wrapping_sub(core::mem::size_of::<Self>());
+    fn get_for_alloc(alloc: NonNull<[u8]>, alloc_align: usize) -> *mut Self {
+        let alloc_end = nonnull_slice_end(alloc);
+        let mut ptr = alloc_end.wrapping_sub(core::mem::size_of::<Self>());
         // If `alloc_end` is not well-aligned, we need to adjust the location
         // of `PoolFtr`
         if alloc_align < core::mem::align_of::<Self>() {
@@ -313,29 +306,28 @@ impl<
 
         if let Some(growable_pool) = self.growable_pool {
             // Try to extend an existing memory pool first.
-            let new_pool_end_desired = unsafe {
-                NonNull::new_unchecked(
-                    (growable_pool.pool_end.as_ptr() as usize)
-                        .checked_add(extra_bytes_well_aligned)? as *mut u8,
-                )
-            };
+            let new_pool_len_desired = growable_pool
+                .pool_len
+                .checked_add(extra_bytes_well_aligned)?;
 
             // The following assertion should not trip because...
             //  - `extra_bytes_well_aligned` returns a value that is at least
             //    as large as `GRANULARITY * 2`.
-            //  - `growable_pool.alloc_end - growable_pool.pool_end` must be
+            //  - `growable_pool.alloc_len - growable_pool.pool_len` must be
             //    less than `GRANULARITY * 2` because of
             //    `insert_free_block_ptr`'s implementation.
-            debug_assert!(new_pool_end_desired >= growable_pool.alloc_end);
+            debug_assert!(new_pool_len_desired >= growable_pool.alloc_len);
 
-            // Safety: `new_pool_end_desired >= growable_pool.alloc_end`, and
-            //         `[growable_pool.alloc_start, growable_pool.alloc_end]`
+            // Safety: `new_pool_end_desired >= growable_pool.alloc_len`, and
+            //         `(growable_pool.alloc_start, growable_pool.alloc_len)`
             //         represents a previous allocation.
-            if let Some(new_alloc_end) = unsafe {
+            if let Some(new_alloc_len) = unsafe {
                 self.source.realloc_inplace_grow(
-                    growable_pool.alloc_start,
-                    growable_pool.alloc_end,
-                    new_pool_end_desired,
+                    nonnull_slice_from_raw_parts(
+                        growable_pool.alloc_start,
+                        growable_pool.alloc_len,
+                    ),
+                    new_pool_len_desired,
                 )
             } {
                 if self.source.supports_dealloc() {
@@ -343,36 +335,52 @@ impl<
                     // still uninitialized because this allocation is still in
                     // `self.growable_pool`, so we only have to move
                     // `PoolFtr::prev_alloc_end`.
-                    let old_pool_ftr = PoolFtr::get_for_alloc_end(
-                        growable_pool.alloc_end,
+                    let old_pool_ftr = PoolFtr::get_for_alloc(
+                        nonnull_slice_from_raw_parts(
+                            growable_pool.alloc_start,
+                            growable_pool.alloc_len,
+                        ),
                         self.source.min_align(),
                     );
-                    let new_pool_ftr =
-                        PoolFtr::get_for_alloc_end(new_alloc_end, self.source.min_align());
-                    // Safety: Both `(*new_pool_ftr).prev_alloc_end` and
-                    //         `(*old_pool_ftr).prev_alloc_end` are within
-                    //         pool footers we control
-                    unsafe { (*new_pool_ftr).prev_alloc_end = (*old_pool_ftr).prev_alloc_end };
+                    let new_pool_ftr = PoolFtr::get_for_alloc(
+                        nonnull_slice_from_raw_parts(growable_pool.alloc_start, new_alloc_len),
+                        self.source.min_align(),
+                    );
+                    // Safety: Both `*new_pool_ftr` and `*old_pool_ftr`
+                    //         represent pool footers we control
+                    unsafe { *new_pool_ftr = *old_pool_ftr };
                 }
 
-                // Safety: `growable_pool.pool_end` is the end address of an
-                //         existing memory pool, and the passed memory block is
-                //         owned by us
-                let new_pool_end = unsafe {
+                let num_appended_len = unsafe {
+                    // Safety: `self.source` allocated some memory after
+                    //         `alloc_start + pool_len`, so it shouldn't be
+                    //         null
+                    let append_start = NonNull::new_unchecked(
+                        growable_pool
+                            .alloc_start
+                            .as_ptr()
+                            .wrapping_add(growable_pool.pool_len),
+                    );
+                    // Safety: `append_start` follows an existing memory pool,
+                    //         and the contained bytes are owned by us
                     self.tlsf
                         .append_free_block_ptr(nonnull_slice_from_raw_parts(
-                            growable_pool.pool_end,
-                            new_alloc_end.as_ptr() as usize
-                                - growable_pool.pool_end.as_ptr() as usize,
+                            append_start,
+                            new_alloc_len - growable_pool.pool_len,
                         ))
                 };
 
                 // This assumption is based on `extra_bytes_well_aligned`'s
                 // implementation. The `debug_assert!` above depends on this.
                 debug_assert!(
-                    (new_alloc_end.as_ptr() as usize - new_pool_end.as_ptr() as usize)
-                        < GRANULARITY * 2
+                    (growable_pool.pool_len + num_appended_len) - new_alloc_len < GRANULARITY * 2
                 );
+
+                self.growable_pool = Some(Pool {
+                    alloc_start: growable_pool.alloc_start,
+                    alloc_len: new_alloc_len,
+                    pool_len: growable_pool.pool_len + num_appended_len,
+                });
 
                 return Some(());
             }
@@ -402,46 +410,33 @@ impl<
         };
 
         // Safety: `extra_bytes` is non-zero and aligned to `GRANULARITY` bytes
-        let [alloc_start, alloc_end] = unsafe { self.source.alloc(extra_bytes)? };
+        let alloc = unsafe { self.source.alloc(extra_bytes)? };
 
         // Safety: The passed memory block is what we acquired from
         //         `self.source`, so we have the ownership
-        let [_, pool_end] = unsafe {
-            self.tlsf
-                .insert_free_block_ptr(nonnull_slice_from_raw_parts(
-                    alloc_start,
-                    alloc_end.as_ptr() as usize - alloc_start.as_ptr() as usize,
-                ))
-        }
-        .unwrap_or_else(|| unsafe {
-            debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
-            // Safety: It's unreachable
-            core::hint::unreachable_unchecked()
-        });
+        let pool_len =
+            unsafe { self.tlsf.insert_free_block_ptr(alloc) }.unwrap_or_else(|| unsafe {
+                debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
+                // Safety: It's unreachable
+                core::hint::unreachable_unchecked()
+            });
 
         if self.source.supports_dealloc() {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the
             // previous pool (`self.growable_pool`).
-            let pool_ftr = PoolFtr::get_for_alloc_end(alloc_end, self.source.min_align());
-            let prev_alloc_end = self.growable_pool.map(|p| p.alloc_end);
-            // Safety: `(*pool_ftr).prev_alloc_end` is within a pool footer
+            let pool_ftr = PoolFtr::get_for_alloc(alloc, self.source.min_align());
+            let prev_alloc = self
+                .growable_pool
+                .map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
+            // Safety: `(*pool_ftr).prev_alloc` is within a pool footer
             //         we control
-            unsafe { (*pool_ftr).prev_alloc_end = prev_alloc_end };
-
-            // Set the previous pool's `PoolFtr::alloc_start`.
-            if let Some(p) = self.growable_pool {
-                let prev_pool_ftr =
-                    PoolFtr::get_for_alloc_end(p.alloc_end, self.source.min_align());
-                // Safety: `(*prev_pool_ftr).alloc_start` is within a pool
-                // footer we control
-                unsafe { (*prev_pool_ftr).alloc_start = p.alloc_start };
-            }
+            unsafe { (*pool_ftr).prev_alloc = prev_alloc };
         }
 
         self.growable_pool = Some(Pool {
-            alloc_start,
-            alloc_end,
-            pool_end,
+            alloc_start: nonnull_slice_start(alloc),
+            alloc_len: nonnull_slice_len(alloc),
+            pool_len,
         });
 
         Some(())
@@ -524,35 +519,21 @@ impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: us
         if self.source.supports_dealloc() {
             // Deallocate all memory pools
             let align = self.source.min_align();
-            let mut cur = self.growable_pool.map(|p| {
-                let hdr = PoolFtr::get_for_alloc_end(p.alloc_end, align);
-                // Safety: `(*hdr).prev_alloc_end` is within a pool footer we
-                //         still control
-                (p.alloc_start, p.alloc_end, unsafe { (*hdr).prev_alloc_end })
-            });
+            let mut cur_alloc_or_none = self
+                .growable_pool
+                .map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
 
-            while let Some((alloc_start, alloc_end, prev_alloc_end)) = cur {
+            while let Some(cur_alloc) = cur_alloc_or_none {
+                // Safety: We control the referenced pool footer
+                let cur_ftr = unsafe { *PoolFtr::get_for_alloc(cur_alloc, align) };
+
                 // Safety: It's an allocation we allocated from `self.source`
-                unsafe { self.source.dealloc([alloc_start, alloc_end]) };
+                unsafe { self.source.dealloc(cur_alloc) };
 
-                cur = prev_alloc_end.map(|prev_alloc_end| {
-                    // Safety: We control the referenced pool footer
-                    let prev_hdr = unsafe { *PoolFtr::get_for_alloc_end(prev_alloc_end, align) };
-                    (
-                        prev_hdr.alloc_start,
-                        prev_alloc_end,
-                        prev_hdr.prev_alloc_end,
-                    )
-                });
+                cur_alloc_or_none = cur_ftr.prev_alloc;
             }
         }
     }
-}
-
-/// Polyfill for <https://github.com/rust-lang/rust/issues/71941>
-#[inline]
-fn nonnull_slice_from_raw_parts<T>(ptr: NonNull<T>, len: usize) -> NonNull<[T]> {
-    unsafe { NonNull::new_unchecked(core::ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len)) }
 }
 
 #[cfg(test)]

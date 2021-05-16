@@ -2,7 +2,10 @@ use quickcheck_macros::quickcheck;
 use std::prelude::v1::*;
 
 use super::*;
-use crate::tests::ShadowAllocator;
+use crate::{
+    tests::ShadowAllocator,
+    utils::{nonnull_slice_end, nonnull_slice_len},
+};
 
 #[derive(Debug, Default)]
 struct TrackingFlexSource<T> {
@@ -11,30 +14,27 @@ struct TrackingFlexSource<T> {
 }
 
 unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<[NonNull<u8>; 2]> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
         log::trace!("FlexSource::alloc({:?})", min_size);
         let range = self.inner.alloc(min_size)?;
         log::trace!(" FlexSource::alloc(...) = {:?}", range);
-        self.sa.insert_free_block(range[0], range[1]);
+        self.sa.insert_free_block(range.as_ptr());
         Some(range)
     }
 
     unsafe fn realloc_inplace_grow(
         &mut self,
-        start: NonNull<u8>,
-        old_end: NonNull<u8>,
-        min_new_end: NonNull<u8>,
-    ) -> Option<NonNull<u8>> {
-        log::trace!(
-            "FlexSource::realloc_inplace_grow{:?}",
-            (start, old_end, min_new_end)
-        );
-        let new_end = self
-            .inner
-            .realloc_inplace_grow(start, old_end, min_new_end)?;
-        log::trace!(" FlexSource::realloc_inplace_grow(...) = {:?}", new_end);
-        self.sa.append_free_block(old_end, new_end);
-        Some(new_end)
+        ptr: NonNull<[u8]>,
+        min_new_len: usize,
+    ) -> Option<usize> {
+        log::trace!("FlexSource::realloc_inplace_grow{:?}", (ptr, min_new_len));
+        let new_len = self.inner.realloc_inplace_grow(ptr, min_new_len)?;
+        log::trace!(" FlexSource::realloc_inplace_grow(...) = {:?}", new_len);
+        self.sa.append_free_block(std::ptr::slice_from_raw_parts(
+            nonnull_slice_end(ptr),
+            new_len - nonnull_slice_len(ptr),
+        ));
+        Some(new_len)
     }
 
     #[inline]
@@ -43,9 +43,9 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, [start, end]: [NonNull<u8>; 2]) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         // TODO: track deallocation with `self.sa`
-        self.inner.dealloc([start, end])
+        self.inner.dealloc(ptr)
     }
 
     #[inline]

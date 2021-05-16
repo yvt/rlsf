@@ -80,20 +80,19 @@ impl ShadowAllocator {
         }
     }
 
-    pub fn insert_free_block(&mut self, start: NonNull<u8>, end: NonNull<u8>) {
-        self.convert_range(
-            start.as_ptr() as usize..end.as_ptr() as usize,
-            SaRegion::Invalid,
-            SaRegion::Free,
-        );
+    pub fn insert_free_block<T>(&mut self, range: *const [T]) {
+        let start = range as *const T as usize;
+        let len = unsafe { &*range }.len();
+        self.convert_range(start..start + len, SaRegion::Invalid, SaRegion::Free);
     }
 
-    pub fn append_free_block(&mut self, start: NonNull<u8>, end: NonNull<u8>) {
-        let mut it = self.regions.range(0..=start.as_ptr() as usize).rev();
+    pub fn append_free_block<T>(&mut self, range: *const [T]) {
+        let start = range as *const T as usize;
+        let mut it = self.regions.range(0..=start).rev();
 
         assert_eq!(
             it.next(),
-            Some((&(start.as_ptr() as usize), &SaRegion::Invalid)),
+            Some((&start, &SaRegion::Invalid)),
             "no boundary at `start`"
         );
 
@@ -103,7 +102,7 @@ impl ShadowAllocator {
             "no previous allocation to append to"
         );
 
-        self.insert_free_block(start, end);
+        self.insert_free_block(range);
     }
 
     pub fn allocate(&mut self, layout: Layout, start: NonNull<u8>) {
