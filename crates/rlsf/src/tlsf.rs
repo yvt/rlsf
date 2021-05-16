@@ -908,7 +908,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         let size = block.as_ref().common.size - SIZE_USED;
         debug_assert_eq!(size, block.as_ref().common.size & SIZE_SIZE_MASK);
 
-        size - mem::size_of::<UsedBlockHdr>()
+        let block_end = block.as_ptr() as usize + size;
+        let payload_start = ptr.as_ptr() as usize;
+        block_end - payload_start
     }
 
     // TODO: `reallocate_no_move` (constant-time reallocation)
