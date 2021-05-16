@@ -49,6 +49,11 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     }
 
     #[inline]
+    fn is_contiguous_growable(&self) -> bool {
+        self.inner.is_contiguous_growable()
+    }
+
+    #[inline]
     fn supports_dealloc(&self) -> bool {
         self.inner.supports_dealloc()
     }

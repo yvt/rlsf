@@ -65,6 +65,23 @@ pub unsafe trait FlexSource {
         false
     }
 
+    /// Returns `true` if this allocator is implemented by managing one
+    /// contiguous region, which is grown every time `alloc` or
+    /// `realloc_inplace_grow` is called.
+    ///
+    /// For example, in WebAssembly, there is usually only one continuous
+    /// memory region available for data processing, and the only way to acquire
+    /// more memory is to grow this region by executing `memory.grow`
+    /// instructions. An implementation of `FlexSource` based on this system
+    /// would use this instruction to implement both `alloc` and
+    /// `realloc_inplace_grow` methods. Therefore, it's pointless for
+    /// [`FlexTlsf`] to call `alloc` when `realloc_inplace_grow` fails. This
+    /// method can be used to remove such redundant calls to `alloc`.
+    #[inline]
+    fn is_contiguous_growable(&self) -> bool {
+        false
+    }
+
     /// Get the minimum alignment of allocations made by this allocator.
     /// [`FlexTlsf`] may be less efficient if this method returns a value
     /// less than [`GRANULARITY`].
@@ -383,8 +400,15 @@ impl<
                 });
 
                 return Some(());
+            } // if let Some(new_alloc_len) = ... realloc_inplace_grow
+
+            if self.source.is_contiguous_growable() {
+                // `is_contiguous_growable`
+                // indicates that `alloc` will also be fruitless because
+                // `realloc_inplace_grow` failed.
+                return None;
             }
-        }
+        } // if let Some(growable_pool) = self.growable_pool
 
         // Create a brand new allocation. `source.min_align` indicates the
         // minimum alignment that the created allocation will satisfy.
