@@ -70,6 +70,7 @@
 //!    its worst-case performance and code size.
 //!
 #![no_std]
+#![cfg_attr(feature = "doc_cfg", feature(doc_cfg))]
 
 // FIXME: panicking in constants is unstable
 macro_rules! const_panic {
