@@ -73,10 +73,12 @@ impl ShadowAllocator {
         }
     }
 
-    fn insert_free_block<T>(&mut self, range: *const [T]) {
-        let start = range as *const T as usize;
-        let len = unsafe { &*range }.len();
-        self.convert_range(start..start + len, SaRegion::Invalid, SaRegion::Free);
+    fn insert_free_block(&mut self, start: NonNull<u8>, end: NonNull<u8>) {
+        self.convert_range(
+            start.as_ptr() as usize..end.as_ptr() as usize,
+            SaRegion::Invalid,
+            SaRegion::Free,
+        );
     }
 
     fn allocate(&mut self, layout: Layout, start: NonNull<u8>) {
@@ -240,13 +242,32 @@ macro_rules! gen_test {
                 let mut sa = ShadowAllocator::new();
                 let mut tlsf: TheTlsf = Tlsf::INIT;
 
-                let mut pool = Align([MaybeUninit::uninit(); 65536]);
-                let pool_start = pool_start % 64;
-                let pool_size = pool_size % (pool.0.len() - 63);
-                let pool = &mut pool.0[pool_start..pool_start+pool_size ];
-                log::trace!("pool = {:p}: [u8; {}]", pool, pool.len());
-                sa.insert_free_block(pool);
-                tlsf.insert_free_block(pool);
+                let mut pool = Align([MaybeUninit::<u8>::uninit(); 65536]);
+                // The end address of the memory pool inserted to `tlsf`
+                let mut pool_end;
+                // The end address of `pool`
+                let pool_limit;
+                unsafe {
+                    // Insert some part of `pool` to `tlsf`
+                    let pool_start = pool_start % 64;
+                    let pool_size = pool_size % (pool.0.len() - 63);
+                    let pool_start = pool.0.as_mut_ptr().wrapping_add(pool_start) as *mut u8;
+                    pool_limit = pool.0.as_mut_ptr().wrapping_add(pool.0.len()) as *mut u8;
+
+                    let initial_pool = NonNull::new(std::ptr::slice_from_raw_parts_mut(
+                        pool_start,
+                        pool_size
+                    )).unwrap();
+                    log::trace!("initial_pool = {:p}: [u8; {}]", pool_start, pool_size);
+
+                    pool_end = if let Some([pool_start, pool_end]) = tlsf.insert_free_block_ptr(initial_pool) {
+                        log::trace!("initial_pool (actual) = {:p}..{:p}", pool_start, pool_end);
+                        sa.insert_free_block(pool_start, pool_end);
+                        Some(pool_end)
+                    } else {
+                        None
+                    };
+                }
 
                 log::trace!("tlsf = {:?}", tlsf);
 
@@ -290,7 +311,7 @@ macro_rules! gen_test {
                                 sa.deallocate(alloc.layout, alloc.ptr);
                             }
                         }
-                        6..=7 => {
+                        6 => {
                             let alloc_i = it.next()?;
                             if allocs.len() > 0 {
                                 let len = u32::from_le_bytes([
@@ -318,6 +339,34 @@ macro_rules! gen_test {
 
                                 }
                             }
+                        }
+                        7 => {
+                            let old_pool_end = if let Some(pool_end) = pool_end {
+                                pool_end
+                            } else {
+                                continue;
+                            };
+
+                            // Incorporate some of `pool_end..pool_limit`
+                            let available = pool_limit as usize - old_pool_end.as_ptr() as usize;
+                            if available == 0 {
+                                continue;
+                            }
+
+                            let num_appended_bytes =
+                                u16::from_le_bytes([it.next()?, it.next()?]) as usize % (available + 1);
+
+                            let appended = nonnull_slice_from_raw_parts(
+                                old_pool_end,
+                                num_appended_bytes,
+                            );
+
+                            log::trace!("appending {:p}: [u8: {}] to pool", old_pool_end, num_appended_bytes);
+
+                            let new_pool_end = unsafe { tlsf.append_free_block_ptr(appended) };
+                            log::trace!(" actual appended range = {:?}", old_pool_end..new_pool_end);
+                            sa.insert_free_block(old_pool_end, new_pool_end);
+                            pool_end = Some(new_pool_end);
                         }
                         _ => unreachable!(),
                     }
@@ -469,3 +518,9 @@ gen_test!(tlsf_u64_u8_59_64, u64, u64, 59, 8);
 gen_test!(tlsf_u64_u8_60_64, u64, u64, 60, 8);
 gen_test!(tlsf_u64_u8_61_64, u64, u64, 61, 8);
 gen_test!(tlsf_u64_u8_64_64, u64, u64, 64, 8);
+
+/// Polyfill for <https://github.com/rust-lang/rust/issues/71941>
+#[inline]
+fn nonnull_slice_from_raw_parts<T>(ptr: NonNull<T>, len: usize) -> NonNull<[T]> {
+    unsafe { NonNull::new_unchecked(core::ptr::slice_from_raw_parts_mut(ptr.as_ptr(), len)) }
+}
