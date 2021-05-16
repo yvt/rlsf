@@ -8,9 +8,22 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-struct TrackingFlexSource<T> {
+struct TrackingFlexSource<T: FlexSource> {
     sa: ShadowAllocator,
     inner: T,
+}
+
+impl<T: FlexSource> Drop for TrackingFlexSource<T> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+
+        if self.inner.supports_dealloc() {
+            // All existing pools should have been removed by `FlexTlsf::drop`
+            self.sa.assert_no_pools();
+        }
+    }
 }
 
 unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
@@ -44,8 +57,11 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
 
     #[inline]
     unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
-        // TODO: track deallocation with `self.sa`
-        self.inner.dealloc(ptr)
+        // TODO: check that `ptr` represents an exact allocation, not just
+        //       a part of it
+        self.inner.dealloc(ptr);
+        log::trace!("FlexSource::dealloc({:?})", ptr);
+        self.sa.remove_pool(ptr.as_ptr());
     }
 
     #[inline]

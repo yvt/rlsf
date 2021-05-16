@@ -1,4 +1,4 @@
-use std::{alloc::Layout, collections::BTreeMap, ops::Range, ptr::NonNull};
+use std::{alloc::Layout, collections::BTreeMap, ops::Range, prelude::v1::*, ptr::NonNull};
 
 #[derive(Debug)]
 pub struct ShadowAllocator {
@@ -80,6 +80,14 @@ impl ShadowAllocator {
         }
     }
 
+    pub fn assert_no_pools(&mut self) {
+        assert!(
+            self.regions.iter().eq(Some((&0, &SaRegion::Invalid))),
+            "{:?}",
+            self.regions,
+        );
+    }
+
     pub fn insert_free_block<T>(&mut self, range: *const [T]) {
         let start = range as *const T as usize;
         let len = unsafe { &*range }.len();
@@ -103,6 +111,57 @@ impl ShadowAllocator {
         );
 
         self.insert_free_block(range);
+    }
+
+    pub fn remove_pool<T>(&mut self, range: *const [T]) {
+        let start = range as *const T as usize;
+        let end = unsafe { &*range }.len() + start;
+        if start >= end {
+            return;
+        }
+        log::trace!("sa: invalidating {:?}", start..end);
+
+        // There mustn't be any `Invalid` regions in the range
+        for (&addr, &region) in self.regions.range(0..end).rev() {
+            if region == SaRegion::Invalid {
+                panic!("invalid region at {}", addr);
+            }
+            if addr <= start {
+                break;
+            }
+        }
+
+        // Create discontinuity at `end` if needed
+        {
+            let (&addr, &region) = self.regions.range(0..=end).rev().next().unwrap();
+            if addr < end && region != SaRegion::Invalid {
+                self.regions.insert(end, region);
+            } else if addr == end && region == SaRegion::Invalid {
+                self.regions.remove(&end);
+            }
+        }
+
+        // Create discontinuity at `start` if needed
+        if let Some((_, &region)) = self.regions.range(0..start).rev().next() {
+            if region != SaRegion::Invalid {
+                self.regions.insert(start, SaRegion::Invalid);
+            } else {
+                self.regions.remove(&start);
+            }
+        } else {
+            assert_eq!(start, 0);
+            self.regions.insert(start, SaRegion::Invalid);
+        }
+
+        // Remove anything remaining between `start` and `end`
+        let keys: Vec<_> = self
+            .regions
+            .range(start + 1..end)
+            .map(|(&addr, _)| addr)
+            .collect();
+        for key in keys.iter() {
+            self.regions.remove(key);
+        }
     }
 
     pub fn allocate(&mut self, layout: Layout, start: NonNull<u8>) {
