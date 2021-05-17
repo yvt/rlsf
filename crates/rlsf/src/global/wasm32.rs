@@ -81,6 +81,11 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         }
     }
 
+    #[inline]
+    fn supports_realloc_inplace_grow(&self) -> bool {
+        Options::COALESCE_POOLS
+    }
+
     // Turns out, `is_contiguous_growable` can't return `true` because
     // other code may issue `memory.grow` without `unsafe` blocks.
 

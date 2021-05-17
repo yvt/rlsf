@@ -73,6 +73,11 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     fn supports_dealloc(&self) -> bool {
         self.inner.supports_dealloc()
     }
+
+    #[inline]
+    fn supports_realloc_inplace_grow(&self) -> bool {
+        self.inner.supports_realloc_inplace_grow()
+    }
 }
 
 /// Continuous-growing flex source
@@ -119,6 +124,10 @@ unsafe impl FlexSource for CgFlexSource {
     }
 
     fn is_contiguous_growable(&self) -> bool {
+        true
+    }
+
+    fn supports_realloc_inplace_grow(&self) -> bool {
         true
     }
 

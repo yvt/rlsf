@@ -65,6 +65,16 @@ pub unsafe trait FlexSource {
         false
     }
 
+    /// Check if this allocator implements [`Self::realloc_inplace_grow`].
+    ///
+    /// If this method returns `false`, [`FlexTlsf`] will not call
+    /// `realloc_inplace_grow` to attempt to grow memory blocks. It also applies
+    /// some optimizations.
+    #[inline]
+    fn supports_realloc_inplace_grow(&self) -> bool {
+        false
+    }
+
     /// Returns `true` if this allocator is implemented by managing one
     /// contiguous region, which is grown every time `alloc` or
     /// `realloc_inplace_grow` is called.
@@ -90,6 +100,18 @@ pub unsafe trait FlexSource {
         1
     }
 }
+
+trait FlexSourceExt: FlexSource {
+    #[inline]
+    fn use_growable_pool(&self) -> bool {
+        // `growable_pool` is used for deallocation and pool growth.
+        // Let's not think about the wasted space caused when this method
+        // returns `false`.
+        self.supports_dealloc() || self.supports_realloc_inplace_grow()
+    }
+}
+
+impl<T: FlexSource> FlexSourceExt for T {}
 
 /// Wraps [`core::alloc::GlobalAlloc`] to implement the [`FlexSource`] trait.
 ///
@@ -311,6 +333,8 @@ impl<
     /// given allocation. Returns `Some(())` on success.
     #[inline]
     fn increase_pool_to_contain_allocation(&mut self, layout: Layout) -> Option<()> {
+        let use_growable_pool = self.source.use_growable_pool();
+
         // How many extra bytes we need to get from the source for the
         // allocation to success?
         let extra_bytes_well_aligned =
@@ -321,7 +345,7 @@ impl<
         // The sentinel block + the block to store the allocation
         debug_assert!(extra_bytes_well_aligned >= GRANULARITY * 2);
 
-        if let Some(growable_pool) = self.growable_pool {
+        if let Some(growable_pool) = self.growable_pool.filter(|_| use_growable_pool) {
             // Try to extend an existing memory pool first.
             let new_pool_len_desired = growable_pool
                 .pool_len
@@ -457,11 +481,13 @@ impl<
             unsafe { (*pool_ftr).prev_alloc = prev_alloc };
         }
 
-        self.growable_pool = Some(Pool {
-            alloc_start: nonnull_slice_start(alloc),
-            alloc_len: nonnull_slice_len(alloc),
-            pool_len,
-        });
+        if use_growable_pool {
+            self.growable_pool = Some(Pool {
+                alloc_start: nonnull_slice_start(alloc),
+                alloc_len: nonnull_slice_len(alloc),
+                pool_len,
+            });
+        }
 
         Some(())
     }
@@ -541,6 +567,8 @@ impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: us
 {
     fn drop(&mut self) {
         if self.source.supports_dealloc() {
+            debug_assert!(self.source.use_growable_pool());
+
             // Deallocate all memory pools
             let align = self.source.min_align();
             let mut cur_alloc_or_none = self
