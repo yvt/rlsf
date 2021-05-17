@@ -1,7 +1,6 @@
 // Adopted from
 // https://github.com/alexcrichton/dlmalloc-rs/blob/master/tests/global.rs
 use std::collections::HashMap;
-use std::thread;
 
 #[global_allocator]
 #[cfg(any(all(target_arch = "wasm32", not(target_feature = "atomics"))))]
@@ -28,7 +27,7 @@ fn strings() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn threads() {
-    assert!(thread::spawn(|| panic!()).join().is_err());
+    assert!(std::thread::spawn(|| panic!()).join().is_err());
 }
 
 #[test]
