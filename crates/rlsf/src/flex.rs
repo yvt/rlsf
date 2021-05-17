@@ -153,10 +153,10 @@ unsafe impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> FlexSource
 #[derive(Debug)]
 pub struct FlexTlsf<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize>
 {
-    source: Source,
-    tlsf: Tlsf<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>,
     /// The lastly created memory pool.
     growable_pool: Option<Pool>,
+    source: Source,
+    tlsf: Tlsf<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>,
 }
 
 #[derive(Debug, Copy, Clone)]
