@@ -14,8 +14,8 @@ if_supported_target! {
     /// [`Tlsf`] as a global allocator.
     ///
     /// [`Tlsf`]: crate::Tlsf
-    pub struct GlobalTlsf<Options = ()> {
-        inner: UnsafeCell<TheTlsf>,
+    pub struct GlobalTlsf<Options: GlobalTlsfOptions = ()> {
+        inner: UnsafeCell<TheTlsf<Options>>,
         #[cfg(not(doc))]
         mutex: os::Mutex,
         _phantom: PhantomData<fn() -> Options>,
@@ -28,9 +28,10 @@ mod wasm32;
 use self::wasm32 as os;
 
 #[cfg(doc)]
-type TheTlsf = ();
+type TheTlsf<Options> = Options;
 #[cfg(not(doc))]
-type TheTlsf = FlexTlsf<os::Source, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
+type TheTlsf<Options> =
+    FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
 impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
     const INIT: Self = Self::INIT;
@@ -45,6 +46,16 @@ if_supported_target! {
         ///
         /// It's enabled by default.
         const ENABLE_REALLOCATION: bool = true;
+
+        /// Instructs the allocator to coalesce consecutive system memory
+        /// allocations into one large memory pool whenever possible.
+        ///
+        /// Warning: If you are going to create allocations larger than or
+        /// roughly as large as the system page size, turning off this option
+        /// can cause an excessive memory usage.
+        ///
+        /// It's enabled by default.
+        const COALESCE_POOLS: bool = true;
     }
 }
 
@@ -63,10 +74,11 @@ if_supported_target! {
 
 impl GlobalTlsfOptions for SmallGlobalTlsfOptions {
     const ENABLE_REALLOCATION: bool = false;
+    const COALESCE_POOLS: bool = false;
 }
 
-unsafe impl<Options> Send for GlobalTlsf<Options> {}
-unsafe impl<Options> Sync for GlobalTlsf<Options> {}
+unsafe impl<Options: GlobalTlsfOptions> Send for GlobalTlsf<Options> {}
+unsafe impl<Options: GlobalTlsfOptions> Sync for GlobalTlsf<Options> {}
 
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     /// The initializer.
@@ -79,11 +91,11 @@ impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
 
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     #[inline]
-    fn lock_inner(&self) -> impl ops::DerefMut<Target = TheTlsf> + '_ {
+    fn lock_inner(&self) -> impl ops::DerefMut<Target = TheTlsf<Options>> + '_ {
         struct LockGuard<'a, Options: GlobalTlsfOptions>(&'a GlobalTlsf<Options>);
 
         impl<Options: GlobalTlsfOptions> ops::Deref for LockGuard<'_, Options> {
-            type Target = TheTlsf;
+            type Target = TheTlsf<Options>;
 
             #[inline]
             fn deref(&self) -> &Self::Target {

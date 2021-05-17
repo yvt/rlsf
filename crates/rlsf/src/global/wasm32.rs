@@ -1,5 +1,7 @@
 use crate::Init;
-use core::{arch::wasm32, ptr::NonNull};
+use core::{arch::wasm32, marker::PhantomData, ptr::NonNull};
+
+use super::GlobalTlsfOptions;
 
 pub struct Mutex(());
 
@@ -17,17 +19,17 @@ impl Mutex {
     pub fn unlock(&self) {}
 }
 
-pub struct Source(());
+pub struct Source<Options>(PhantomData<fn() -> Options>);
 
-impl Init for Source {
-    const INIT: Self = Self(());
+impl<Options> Init for Source<Options> {
+    const INIT: Self = Self(PhantomData);
 }
 
 const MEM: u32 = 0;
 const PAGE_SIZE_LOG2: u32 = 16;
 const PAGE_SIZE: usize = 1 << PAGE_SIZE_LOG2;
 
-unsafe impl crate::flex::FlexSource for Source {
+unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Options> {
     #[inline]
     unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
         let num_pages = min_size.checked_add(PAGE_SIZE - 1)? / PAGE_SIZE;
@@ -57,6 +59,10 @@ unsafe impl crate::flex::FlexSource for Source {
         ptr: NonNull<[u8]>,
         min_new_len: usize,
     ) -> Option<usize> {
+        if !Options::COALESCE_POOLS {
+            return None;
+        }
+
         let ptr_page = ptr.as_ptr() as *mut u8 as usize / PAGE_SIZE;
         if ptr_page != wasm32::memory_size(MEM) {
             // We can't grow the memory from `ptr`; someone else has grown it
