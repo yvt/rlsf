@@ -15,6 +15,7 @@ if_supported_target! {
     /// [`Tlsf`]: crate::Tlsf
     pub struct GlobalTlsf {
         inner: UnsafeCell<TheTlsf>,
+        #[cfg(not(doc))]
         mutex: os::Mutex,
     }
 }
@@ -24,6 +25,9 @@ mod wasm32;
 #[cfg(target_arch = "wasm32")]
 use self::wasm32 as os;
 
+#[cfg(doc)]
+type TheTlsf = ();
+#[cfg(not(doc))]
 type TheTlsf = FlexTlsf<os::Source, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
 impl Init for GlobalTlsf {
