@@ -414,7 +414,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
     /// unsafe {
-    ///     tlsf.insert_free_block_ptr(NonNull::from(POOL.as_mut_ptr()).unwrap());
+    ///     tlsf.insert_free_block_ptr(NonNull::new(POOL.as_mut_ptr()).unwrap());
     /// }
     /// ```
     ///
