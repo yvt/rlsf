@@ -94,6 +94,31 @@ pub use self::{
     tlsf::{Tlsf, GRANULARITY},
 };
 
+/// Attaches `#[cfg(...)]` and `#[doc(cfg(...))]` to a given item definition
+/// to conditionally compile it only when we have a `GlobalTlsf` implementation
+/// for the current target.
+macro_rules! if_supported_target {
+    (
+        $($tt:tt)*
+    ) => {
+        #[cfg(any(
+            all(target_arch = "wasm32", not(target_feature = "atomics")),
+            doc,
+        ))]
+        #[cfg_attr(
+            feature = "doc_cfg",
+            doc(cfg(any(
+                all(target_arch = "wasm32", not(target_feature = "atomics")),
+                // no `doc` here
+            )))
+        )]
+        $($tt)*
+    };
+}
+
+if_supported_target! { mod global; }
+if_supported_target! { pub use self::global::*; }
+
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
