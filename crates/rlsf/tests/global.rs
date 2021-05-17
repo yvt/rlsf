@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[global_allocator]
 #[cfg(any(all(target_arch = "wasm32", not(target_feature = "atomics"))))]
-static A: rlsf::GlobalTlsf = rlsf::GlobalTlsf::INIT;
+static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::INIT;
 
 #[test]
 fn foo() {

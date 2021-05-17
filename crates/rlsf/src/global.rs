@@ -1,6 +1,7 @@
 use core::{
     alloc,
     cell::UnsafeCell,
+    marker::PhantomData,
     ops,
     ptr::{self, NonNull},
 };
@@ -13,10 +14,11 @@ if_supported_target! {
     /// [`Tlsf`] as a global allocator.
     ///
     /// [`Tlsf`]: crate::Tlsf
-    pub struct GlobalTlsf {
+    pub struct GlobalTlsf<Options = ()> {
         inner: UnsafeCell<TheTlsf>,
         #[cfg(not(doc))]
         mutex: os::Mutex,
+        _phantom: PhantomData<fn() -> Options>,
     }
 }
 
@@ -30,27 +32,57 @@ type TheTlsf = ();
 #[cfg(not(doc))]
 type TheTlsf = FlexTlsf<os::Source, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
-impl Init for GlobalTlsf {
+impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
     const INIT: Self = Self::INIT;
 }
 
-unsafe impl Send for GlobalTlsf {}
-unsafe impl Sync for GlobalTlsf {}
+if_supported_target! {
+    /// The options for [`GlobalTlsf`].
+    pub trait GlobalTlsfOptions {
+        /// Enables the specialized reallocation routine. This option might
+        /// improve the memory usage and runtime performance but increases the
+        /// code size considerably.
+        ///
+        /// It's enabled by default.
+        const ENABLE_REALLOCATION: bool = true;
+    }
+}
 
-impl GlobalTlsf {
+impl GlobalTlsfOptions for () {}
+
+if_supported_target! {
+    /// [`GlobalTlsfOptions`] with all options set to optimize for code size.
+    #[derive(Debug)]
+    pub struct SmallGlobalTlsfOptions;
+}
+
+if_supported_target! {
+    /// An instantiation of [`GlobalTlsf`] optimized for code size.
+    pub type SmallGlobalTlsf = GlobalTlsf<SmallGlobalTlsfOptions>;
+}
+
+impl GlobalTlsfOptions for SmallGlobalTlsfOptions {
+    const ENABLE_REALLOCATION: bool = false;
+}
+
+unsafe impl<Options> Send for GlobalTlsf<Options> {}
+unsafe impl<Options> Sync for GlobalTlsf<Options> {}
+
+impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     /// The initializer.
     pub const INIT: Self = Self {
         inner: UnsafeCell::new(Init::INIT),
         mutex: Init::INIT,
+        _phantom: PhantomData,
     };
 }
 
-impl GlobalTlsf {
+impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     #[inline]
     fn lock_inner(&self) -> impl ops::DerefMut<Target = TheTlsf> + '_ {
-        struct LockGuard<'a>(&'a GlobalTlsf);
+        struct LockGuard<'a, Options: GlobalTlsfOptions>(&'a GlobalTlsf<Options>);
 
-        impl ops::Deref for LockGuard<'_> {
+        impl<Options: GlobalTlsfOptions> ops::Deref for LockGuard<'_, Options> {
             type Target = TheTlsf;
 
             #[inline]
@@ -60,7 +92,7 @@ impl GlobalTlsf {
             }
         }
 
-        impl ops::DerefMut for LockGuard<'_> {
+        impl<Options: GlobalTlsfOptions> ops::DerefMut for LockGuard<'_, Options> {
             #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
                 // Safety: Protected by `mutex`
@@ -68,7 +100,7 @@ impl GlobalTlsf {
             }
         }
 
-        impl Drop for LockGuard<'_> {
+        impl<Options: GlobalTlsfOptions> Drop for LockGuard<'_, Options> {
             #[inline]
             fn drop(&mut self) {
                 self.0.mutex.unlock();
@@ -80,7 +112,7 @@ impl GlobalTlsf {
     }
 }
 
-unsafe impl alloc::GlobalAlloc for GlobalTlsf {
+unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Options> {
     #[inline]
     unsafe fn alloc(&self, layout: alloc::Layout) -> *mut u8 {
         let mut inner = self.lock_inner();
@@ -108,11 +140,30 @@ unsafe impl alloc::GlobalAlloc for GlobalTlsf {
         // Safety: `layout.align()` is a power of two, and the size parameter's
         //         validity is upheld by the caller
         let new_layout = alloc::Layout::from_size_align_unchecked(new_size, layout.align());
-        // Safety: `ptr` denotes a previous allocation with alignment
-        //         `layout.align()`
-        inner
-            .reallocate(ptr, new_layout)
-            .map(NonNull::as_ptr)
-            .unwrap_or(ptr::null_mut())
+        if Options::ENABLE_REALLOCATION {
+            // Safety: `ptr` denotes a previous allocation with alignment
+            //         `layout.align()`
+            inner
+                .reallocate(ptr, new_layout)
+                .map(NonNull::as_ptr)
+                .unwrap_or(ptr::null_mut())
+        } else {
+            // Safety: the caller must ensure that `new_layout` is greater than zero.
+            if let Some(new_ptr) = inner.allocate(new_layout) {
+                // Safety: the previously allocated block cannot overlap the
+                //         newly allocated block.
+                //         The safety contract for `deallocate` must be upheld
+                //         by the caller.
+                ptr::copy_nonoverlapping(
+                    ptr.as_ptr(),
+                    new_ptr.as_ptr(),
+                    layout.size().min(new_size),
+                );
+                inner.deallocate(ptr, layout.align());
+                new_ptr.as_ptr()
+            } else {
+                ptr::null_mut()
+            }
+        }
     }
 }
