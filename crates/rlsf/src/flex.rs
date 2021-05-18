@@ -460,14 +460,22 @@ impl<
         // Safety: `extra_bytes` is non-zero and aligned to `GRANULARITY` bytes
         let alloc = unsafe { self.source.alloc(extra_bytes)? };
 
+        let is_well_aligned = self.source.min_align() >= super::GRANULARITY;
+
         // Safety: The passed memory block is what we acquired from
         //         `self.source`, so we have the ownership
-        let pool_len =
-            unsafe { self.tlsf.insert_free_block_ptr(alloc) }.unwrap_or_else(|| unsafe {
-                debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
-                // Safety: It's unreachable
-                core::hint::unreachable_unchecked()
-            });
+        let pool_len = unsafe {
+            if is_well_aligned {
+                self.tlsf.insert_free_block_ptr_aligned(alloc)
+            } else {
+                self.tlsf.insert_free_block_ptr(alloc)
+            }
+        }
+        .unwrap_or_else(|| unsafe {
+            debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
+            // Safety: It's unreachable
+            core::hint::unreachable_unchecked()
+        });
 
         if self.source.supports_dealloc() {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the

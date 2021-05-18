@@ -8,7 +8,10 @@ use core::{
     ptr::NonNull,
 };
 
-use crate::{int::BinInteger, utils::nonnull_slice_len};
+use crate::{
+    int::BinInteger,
+    utils::{nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start},
+};
 
 #[cfg_attr(doc, svgbobdoc::transform)]
 /// The TLSF header (top-level) data structure.
@@ -433,8 +436,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         let unaligned_start = block.as_ptr() as *mut u8 as usize;
         let start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
 
-        // Calculate the new block length
-        let mut size = if let Some(x) = len
+        let len = if let Some(x) = len
             .checked_sub(start.wrapping_sub(unaligned_start))
             .filter(|&x| x >= GRANULARITY * 2)
         {
@@ -444,6 +446,22 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             // The block is too small
             return None;
         };
+
+        // Safety: The slice being created here
+        let pool_len = self.insert_free_block_ptr_aligned(NonNull::new_unchecked(
+            core::slice::from_raw_parts_mut(start as *mut u8, len),
+        ))?;
+
+        Some(pool_len + start.wrapping_sub(unaligned_start))
+    }
+
+    /// [`insert_free_block_ptr`] with a well-aligned slice passed by `block`.
+    pub(crate) unsafe fn insert_free_block_ptr_aligned(
+        &mut self,
+        block: NonNull<[u8]>,
+    ) -> Option<usize> {
+        let start = block.as_ptr() as *mut u8 as usize;
+        let mut size = nonnull_slice_len(block);
 
         let mut cursor = start;
 
@@ -488,7 +506,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             cursor = cursor.wrapping_add(chunk_size);
         }
 
-        Some(cursor.wrapping_sub(unaligned_start))
+        Some(cursor.wrapping_sub(start))
     }
 
     /// Extend an existing memory pool by incorporating the specified memory
@@ -553,6 +571,12 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///
     /// This method never panics.
     pub unsafe fn append_free_block_ptr(&mut self, block: NonNull<[u8]>) -> usize {
+        // Round down the length
+        let block = nonnull_slice_from_raw_parts(
+            nonnull_slice_start(block),
+            nonnull_slice_len(block) & !(GRANULARITY - 1),
+        );
+
         // TODO: coalesce the last free block of the previous memory pool
         self.insert_free_block_ptr(block).unwrap_or(0)
     }
