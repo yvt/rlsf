@@ -309,6 +309,7 @@ impl<
     ///
     /// This method will complete in constant time (assuming `Source`'s methods
     /// do so as well).
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     pub fn allocate(&mut self, layout: Layout) -> Option<NonNull<u8>> {
         if let Some(x) = self.tlsf.allocate(layout) {
             return Some(x);
@@ -513,7 +514,7 @@ impl<
     ///  - The memory block must have been allocated with the same alignment
     ///    ([`Layout::align`]) as `align`.
     ///
-    #[inline]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, align: usize) {
         // Safety: Upheld by the caller
         self.tlsf.deallocate(ptr, align)

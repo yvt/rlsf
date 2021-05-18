@@ -346,6 +346,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///  - `size` must have a corresponding free list, which does not currently
     ///    contain `block`.
     ///
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     unsafe fn link_free_block(&mut self, mut block: NonNull<FreeBlockHdr>, size: usize) {
         let (fl, sl) = Self::map_floor(size).unwrap_or_else(|| unreachable_unchecked());
         let first_free = &mut self.first_free[fl][sl];
@@ -367,6 +368,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///  - `size` must represent the specified free block's size.
     ///  - The free block must be currently included in a free block list.
     ///
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     unsafe fn unlink_free_block(&mut self, mut block: NonNull<FreeBlockHdr>, size: usize) {
         let next_free = block.as_mut().next_free;
         let prev_free = block.as_mut().prev_free;
