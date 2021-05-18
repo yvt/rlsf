@@ -102,6 +102,45 @@ macro_rules! gen_test {
             }
 
             #[test]
+            fn append_free_block_ptr() {
+                let _ = env_logger::builder().is_test(true).try_init();
+
+                let mut tlsf: TheTlsf = Tlsf::INIT;
+
+                let mut pool = Align([MaybeUninit::uninit(); 512]);
+                let mut cursor = pool.0[0].as_mut_ptr() as *mut u8;
+                let mut remaining_len = 512;
+
+                let pool0_len = unsafe {
+                    tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
+                        NonNull::new(cursor).unwrap(), remaining_len / 2))
+                }.unwrap();
+                cursor = cursor.wrapping_add(pool0_len);
+                remaining_len -= pool0_len;
+
+                log::trace!("tlsf = {:?}", tlsf);
+
+                // The memory pool is too small at this point
+                assert!(tlsf.allocate(Layout::from_size_align(384, 1).unwrap()).is_none());
+
+                let _pool1_len = unsafe {
+                    tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
+                        NonNull::new(cursor).unwrap(), remaining_len))
+                };
+
+                log::trace!("tlsf = {:?}", tlsf);
+
+                let ptr = tlsf.allocate(Layout::from_size_align(384, 1).unwrap());
+                log::trace!("ptr = {:?}", ptr);
+
+                if TheTlsf::MAX_POOL_SIZE.is_none() {
+                    // `append_free_block_ptr` coalesces consecutive
+                    // memory pools, so this allocation should succeed
+                    ptr.unwrap();
+                }
+            }
+
+            #[test]
             fn insert_free_block_ptr_near_end_fail() {
                 let mut tlsf: TheTlsf = Tlsf::INIT;
                 unsafe {

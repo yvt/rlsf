@@ -517,6 +517,12 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// Returns the number of incorporated bytes, counted from the beginning of
     /// `block`.
     ///
+    /// In the current implementation, this method can coalesce memory pools
+    /// only if the maximum pool size is outside the range of `usize`, i.e.,
+    /// `log2(GRANULARITY) + FLLEN >= usize::BITS`. This is because it does not
+    /// track each pool's size and cannot check whether the resulting pool will
+    /// have a valid size.
+    ///
     /// # Time Complexity
     ///
     /// This method will complete in linear time (`O(block.len())`) because
@@ -574,13 +580,78 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// This method never panics.
     pub unsafe fn append_free_block_ptr(&mut self, block: NonNull<[u8]>) -> usize {
         // Round down the length
-        let block = nonnull_slice_from_raw_parts(
-            nonnull_slice_start(block),
-            nonnull_slice_len(block) & !(GRANULARITY - 1),
+        let start = nonnull_slice_start(block);
+        let len = nonnull_slice_len(block) & !(GRANULARITY - 1);
+
+        if Self::MAX_POOL_SIZE.is_some() {
+            // If `MAX_POOL_SIZE` is `Some(_)`, it's dangerous to coalesce
+            // memory pools of unknown sizes, so fall back to calling
+            // `insert_free_block_ptr_aligned`.
+            let block = nonnull_slice_from_raw_parts(start, len);
+            return self.insert_free_block_ptr_aligned(block).unwrap_or(0);
+        } else if len == 0 {
+            // `block` is so short that the `insert_free_block_ptr` will not
+            // even create a sentinel block. We'll corrupt the structure if we
+            // proceed.
+            return 0;
+        }
+
+        let original_start = start.as_ptr();
+        let mut start = original_start;
+        let end = (start as usize).wrapping_add(len);
+
+        // The sentinel block from the preceding memory pool will be
+        // assimilated into `[start..end]`.
+        start = start.wrapping_sub(super::GRANULARITY);
+        let sentinel_block = start as *mut UsedBlockHdr;
+        debug_assert_eq!(
+            (*sentinel_block).common.size,
+            GRANULARITY | SIZE_USED | SIZE_SENTINEL
         );
 
-        // TODO: coalesce the last free block of the previous memory pool
-        self.insert_free_block_ptr(block).unwrap_or(0)
+        // The adjacent free block (if there's one) from the preceding memory
+        // pool will be assimilated into `[start..end]`.
+        let penultimate_block = (*sentinel_block)
+            .common
+            .prev_phys_block
+            .unwrap_or_else(|| unreachable_unchecked());
+        let last_nonassimilated_block;
+        if (penultimate_block.as_ref().size & SIZE_USED) == 0 {
+            let free_block = penultimate_block.cast::<FreeBlockHdr>();
+            let free_block_size = free_block.as_ref().common.size;
+            debug_assert_eq!(
+                free_block_size,
+                free_block.as_ref().common.size & SIZE_SIZE_MASK
+            );
+            self.unlink_free_block(free_block, free_block_size);
+
+            // Assimilation success
+            start = free_block.as_ptr() as *mut u8;
+            last_nonassimilated_block = free_block.as_ref().common.prev_phys_block;
+        } else {
+            // Assimilation failed
+            last_nonassimilated_block = Some(penultimate_block);
+        }
+
+        // Safety: `start` points to a location inside an existion memory pool,
+        //         so it's non-null
+        let block = nonnull_slice_from_raw_parts(
+            NonNull::new_unchecked(start),
+            end.wrapping_sub(start as usize),
+        );
+
+        // Create a memory pool
+        let pool_len = self
+            .insert_free_block_ptr_aligned(block)
+            .unwrap_or_else(|| unreachable_unchecked());
+
+        // Link the created pool's first block to the preceding memory pool's
+        // last non-assimilated block to form one continuous memory pool
+        let mut first_block = nonnull_slice_start(block).cast::<FreeBlockHdr>();
+        first_block.as_mut().common.prev_phys_block = last_nonassimilated_block;
+
+        // Exclude the assimilated part from the returned value
+        pool_len - (original_start as usize).wrapping_sub(start as usize)
     }
 
     /// Create a new memory pool at the location specified by a slice.
