@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["yvt <i@yvt.jp>"]
 license = "MIT/Apache-2.0"
 edition = "2018"
+readme = "README.md"
+description = "Real-time dynamic memory allocator based on the TLSF algorithm"
+categories = ["embedded", "no-std", "wasm", "memory-management", "web-programming"]
+repository = "https://github.com/yvt/rlsf"
 
 [features]
 doc_cfg = []
