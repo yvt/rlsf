@@ -70,6 +70,8 @@ pub unsafe trait FlexSource {
     /// If this method returns `false`, [`FlexTlsf`] will not call
     /// `realloc_inplace_grow` to attempt to grow memory blocks. It also applies
     /// some optimizations.
+    ///
+    /// The returned value must be constant for a particular instance of `Self`.
     #[inline]
     fn supports_realloc_inplace_grow(&self) -> bool {
         false
@@ -87,6 +89,8 @@ pub unsafe trait FlexSource {
     /// `realloc_inplace_grow` methods. Therefore, it's pointless for
     /// [`FlexTlsf`] to call `alloc` when `realloc_inplace_grow` fails. This
     /// method can be used to remove such redundant calls to `alloc`.
+    ///
+    /// The returned value must be constant for a particular instance of `Self`.
     #[inline]
     fn is_contiguous_growable(&self) -> bool {
         false
@@ -95,6 +99,8 @@ pub unsafe trait FlexSource {
     /// Get the minimum alignment of allocations made by this allocator.
     /// [`FlexTlsf`] may be less efficient if this method returns a value
     /// less than [`GRANULARITY`].
+    ///
+    /// The returned value must be constant for a particular instance of `Self`.
     #[inline]
     fn min_align(&self) -> usize {
         1
