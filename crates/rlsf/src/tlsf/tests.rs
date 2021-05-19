@@ -114,7 +114,7 @@ macro_rules! gen_test {
                 let pool0_len = unsafe {
                     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
                         NonNull::new(cursor).unwrap(), remaining_len / 2))
-                }.unwrap();
+                }.unwrap().get();
                 cursor = cursor.wrapping_add(pool0_len);
                 remaining_len -= pool0_len;
 
@@ -199,6 +199,7 @@ macro_rules! gen_test {
                     log::trace!("initial_pool = {:p}: [u8; {}]", pool_ptr, pool_size);
 
                     pool_len = if let Some(pool_len) = tlsf.insert_free_block_ptr(initial_pool) {
+                        let pool_len = pool_len.get();
                         log::trace!("initial_pool (actual) = {:p}: {}", pool_ptr, pool_len);
                         sa.insert_free_block(std::ptr::slice_from_raw_parts(
                             pool_ptr,

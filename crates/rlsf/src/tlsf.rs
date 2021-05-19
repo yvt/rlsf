@@ -5,6 +5,7 @@ use core::{
     hint::unreachable_unchecked,
     marker::PhantomData,
     mem::{self, MaybeUninit},
+    num::NonZeroUsize,
     ptr::NonNull,
 };
 
@@ -431,7 +432,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Panics
     ///
     /// This method never panics.
-    pub unsafe fn insert_free_block_ptr(&mut self, block: NonNull<[u8]>) -> Option<usize> {
+    pub unsafe fn insert_free_block_ptr(&mut self, block: NonNull<[u8]>) -> Option<NonZeroUsize> {
         let len = nonnull_slice_len(block);
 
         // Round up the starting address
@@ -454,14 +455,18 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             core::slice::from_raw_parts_mut(start as *mut u8, len),
         ))?;
 
-        Some(pool_len + start.wrapping_sub(unaligned_start))
+        // Safety: The sum should not wrap around because it represents the size
+        //         of a memory pool on memory
+        Some(NonZeroUsize::new_unchecked(
+            pool_len.get() + start.wrapping_sub(unaligned_start),
+        ))
     }
 
     /// [`insert_free_block_ptr`] with a well-aligned slice passed by `block`.
     pub(crate) unsafe fn insert_free_block_ptr_aligned(
         &mut self,
         block: NonNull<[u8]>,
-    ) -> Option<usize> {
+    ) -> Option<NonZeroUsize> {
         let start = block.as_ptr() as *mut u8 as usize;
         let mut size = nonnull_slice_len(block);
 
@@ -508,7 +513,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             cursor = cursor.wrapping_add(chunk_size);
         }
 
-        Some(cursor.wrapping_sub(start))
+        NonZeroUsize::new(cursor.wrapping_sub(start))
     }
 
     /// Extend an existing memory pool by incorporating the specified memory
@@ -543,7 +548,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// let pool0_len = unsafe {
     ///     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
     ///         NonNull::new(cursor).unwrap(), remaining_len / 2))
-    /// }.unwrap();
+    /// }.unwrap().get();
     /// cursor = cursor.wrapping_add(pool0_len);
     /// remaining_len -= pool0_len;
     ///
@@ -588,7 +593,10 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             // memory pools of unknown sizes, so fall back to calling
             // `insert_free_block_ptr_aligned`.
             let block = nonnull_slice_from_raw_parts(start, len);
-            return self.insert_free_block_ptr_aligned(block).unwrap_or(0);
+            return self
+                .insert_free_block_ptr_aligned(block)
+                .map(NonZeroUsize::get)
+                .unwrap_or(0);
         } else if len == 0 {
             // `block` is so short that the `insert_free_block_ptr` will not
             // even create a sentinel block. We'll corrupt the structure if we
@@ -643,7 +651,12 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // Create a memory pool
         let pool_len = self
             .insert_free_block_ptr_aligned(block)
-            .unwrap_or_else(|| unreachable_unchecked());
+            .unwrap_or_else(|| {
+                debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
+                // Safety: It's unreachable
+                unreachable_unchecked()
+            })
+            .get();
 
         // Link the created pool's first block to the preceding memory pool's
         // last non-assimilated block to form one continuous memory pool

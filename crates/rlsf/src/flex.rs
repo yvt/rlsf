@@ -476,7 +476,8 @@ impl<
             debug_assert!(false, "`pool_size_to_contain_allocation` is an impostor");
             // Safety: It's unreachable
             core::hint::unreachable_unchecked()
-        });
+        })
+        .get();
 
         if self.source.supports_dealloc() {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the
