@@ -452,7 +452,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Safety: The slice being created here
         let pool_len = self.insert_free_block_ptr_aligned(NonNull::new_unchecked(
-            core::slice::from_raw_parts_mut(start as *mut u8, len),
+            core::ptr::slice_from_raw_parts_mut(start as *mut u8, len),
         ))?;
 
         // Safety: The sum should not wrap around because it represents the size
