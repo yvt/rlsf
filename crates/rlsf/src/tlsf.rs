@@ -349,7 +349,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     unsafe fn link_free_block(&mut self, mut block: NonNull<FreeBlockHdr>, size: usize) {
-        let (fl, sl) = Self::map_floor(size).unwrap_or_else(|| unreachable_unchecked());
+        let (fl, sl) = Self::map_floor(size).unwrap_or_else(|| {
+            debug_assert!(false, "could not map size {}", size);
+            // Safety: It's unreachable
+            unreachable_unchecked()
+        });
         let first_free = &mut self.first_free[fl][sl];
         let next_free = mem::replace(first_free, Some(block));
         block.as_mut().next_free = next_free;
@@ -381,7 +385,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         if let Some(mut prev_free) = prev_free {
             prev_free.as_mut().next_free = next_free;
         } else {
-            let (fl, sl) = Self::map_floor(size).unwrap_or_else(|| unreachable_unchecked());
+            let (fl, sl) = Self::map_floor(size).unwrap_or_else(|| {
+                debug_assert!(false, "could not map size {}", size);
+                // Safety: It's unreachable
+                unreachable_unchecked()
+            });
             let first_free = &mut self.first_free[fl][sl];
 
             debug_assert_eq!(*first_free, Some(block));
@@ -619,10 +627,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // The adjacent free block (if there's one) from the preceding memory
         // pool will be assimilated into `[start..end]`.
-        let penultimate_block = (*sentinel_block)
-            .common
-            .prev_phys_block
-            .unwrap_or_else(|| unreachable_unchecked());
+        let penultimate_block = (*sentinel_block).common.prev_phys_block.unwrap_or_else(|| {
+            debug_assert!(false, "sentinel block has no `prev_phys_block`");
+            // Safety: It's unreachable
+            unreachable_unchecked()
+        });
         let last_nonassimilated_block;
         if (penultimate_block.as_ref().size & SIZE_USED) == 0 {
             let free_block = penultimate_block.cast::<FreeBlockHdr>();
@@ -762,7 +771,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
             // Get a free block: `block`
             let first_free = &mut self.first_free[fl][sl];
-            let block = first_free.unwrap_or_else(|| unreachable_unchecked());
+            let block = first_free.unwrap_or_else(|| {
+                debug_assert!(false, "bitmap outdated");
+                // Safety: It's unreachable
+                unreachable_unchecked()
+            });
             let mut next_phys_block = block.as_ref().common.next_phys_block();
             let size_and_flags = block.as_ref().common.size;
             let size = size_and_flags /* size_and_flags & SIZE_SIZE_MASK */;
@@ -867,7 +880,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
             sl = self.sl_bitmap[fl].trailing_zeros() as usize;
             if sl >= SLLEN {
-                debug_assert!(false);
+                debug_assert!(false, "bitmap contradiction");
                 unsafe { unreachable_unchecked() };
             }
 
