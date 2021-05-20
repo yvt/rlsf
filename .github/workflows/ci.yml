@@ -1,0 +1,41 @@
+on: [push, pull_request]
+
+name: CI
+
+jobs:
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          components: clippy
+      - name: cargo clippy
+        uses: actions-rs/clippy-check@v1.0.7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: -p rlsf
+
+  test:
+    name: Test
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          components: clippy
+      - name: cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p rlsf
+      - name: cargo test --features std
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p rlsf --features std
