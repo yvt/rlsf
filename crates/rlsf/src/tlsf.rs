@@ -303,7 +303,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Now take into account the fact that `FLLEN` is not actually infinity
         if FLLEN as u32 - 1 < USIZE_BITS - GRANULARITY_LOG2 - 1 {
-            max1 >> (USIZE_BITS - GRANULARITY_LOG2 - 1) - (FLLEN as u32 - 1)
+            max1 >> ((USIZE_BITS - GRANULARITY_LOG2 - 1) - (FLLEN as u32 - 1))
         } else {
             max1
         }
@@ -1161,6 +1161,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         let mut moving_clearance_end = next_phys_block;
 
         // Grow into the next free block. Fail if there isn't such a block.
+        #[allow(clippy::never_loop)]
         'nonmoving: loop {
             let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
 
