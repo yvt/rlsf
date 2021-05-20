@@ -34,8 +34,8 @@ pp. 79-88, doi: 10.1109/EMRTS.2004.1311009.</sub>
 <a href="https://github.com/yvt/farcri-rs">FarCri.rs</a>.</sub>
 
 <sub>³ But rlsf can't return free memory blocks to the underlying memory
-system. If that's a problem, you should just use the default allocator
-(and keep the I-cache clean).
+system. In a situation where returning memory blocks is important, you
+should probably just use the default allocator (and keep the I-cache clean).
 </sub>
 
 ## Measured Performance
