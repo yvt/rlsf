@@ -1,5 +1,5 @@
 //! This crate implements the TLSF (Two-Level Segregated Fit) dynamic memory
-//! allocation algorithm¹.
+//! allocation algorithm¹. Requires Rust 1.51.0 or later.
 //!
 //!  - **Allocation and deallocation operations are guaranteed to complete in
 //!    constant time.** TLSF is suitable for real-time applications.
