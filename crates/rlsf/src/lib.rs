@@ -30,6 +30,22 @@
 //! (and keep the I-cache clean).
 //! </sub>
 //!
+//! # Measured Performance
+//!
+//! ![The result of latency measurement on STM32F401 is shown here. rlsf:
+//! 260–320 cycles. buddy-alloc: 340–440 cycles. dlmalloc: 450–750 cycles.
+//! linked_list_allocator: 1–7 kilocycles.
+//! ](https://ipfs.io/ipfs/QmX16m5UzAiiH9QBPBGfPydqiLipjy4bPfbivKDboMwX3Z/time-cm4f-xf.svg)
+//!
+//! ![The result of code size measurement on WebAssembly is shown here. rlsf:
+//! 1267 bytes, rlsf + pool coalescing: 1584 bytes, wee_alloc: 1910 bytes,
+//! dlmalloc: 9613 bytes.
+//! ](https://ipfs.io/ipfs/QmX16m5UzAiiH9QBPBGfPydqiLipjy4bPfbivKDboMwX3Z/size-wasm-xf.svg)
+//!
+//! <!-- The latest version at the point of writing was used for each library's
+//! measurement. The exception is `wee_alloc`, for which a fork based on commit
+//! f26c431df6f was used to make it compile on the latest nightly compiler. -->
+//!
 //! # Examples
 //!
 //! ```rust
