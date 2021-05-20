@@ -84,6 +84,7 @@
 //!
 //! ```rust
 //! #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+//! #[global_allocator]
 //! static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::INIT;
 //!
 //! let mut m = std::collections::HashMap::new();
