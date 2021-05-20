@@ -48,6 +48,8 @@
 //!
 //! # Examples
 //!
+//! ## `Tlsf`: Core API
+//!
 //! ```rust
 //! use rlsf::Tlsf;
 //! use std::{mem::MaybeUninit, alloc::Layout};
@@ -74,6 +76,18 @@
 //!     tlsf.deallocate(ptr1.cast(), Layout::new::<u64>().align());
 //!     tlsf.deallocate(ptr2.cast(), Layout::new::<u64>().align());
 //! }
+//! ```
+//!
+//! ## `GlobalTlsf`: Global Allocator
+//!
+//! ```rust
+//! #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+//! static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::INIT;
+//!
+//! let mut m = std::collections::HashMap::new();
+//! m.insert(1, 2);
+//! m.insert(5, 3);
+//! drop(m);
 //! ```
 //!
 //! # Details
