@@ -7,7 +7,7 @@
 //!  - **Fast and small.** You can have both. It was found to be smaller and
 //!    faster² than three randomly chosen `no_std`-compatible allocator crates.
 //!
-//!  - **The memory pool is provided by an application³.** Examples of potential
+//!  - **The memory pool is provided by an application.** Examples of potential
 //!    memory pool sources include: a `static` array for global memory
 //!    allocation, a memory block allocated by another memory allocator for
 //!    arena allocation.
@@ -24,11 +24,6 @@
 //!
 //! <sub>² Compiled for and measured on a STM32F401 microcontroller using
 //! <a href="https://github.com/yvt/farcri-rs">FarCri.rs</a>.</sub>
-//!
-//! <sub>³ But rlsf can't return free memory blocks to the underlying memory
-//! system. In a situation where returning memory blocks is important, you
-//! should probably just use the default allocator (and keep the I-cache clean).
-//! </sub>
 //!
 //! # Measured Performance
 //!
@@ -47,6 +42,18 @@
 //! <!-- The latest version at the point of writing was used for each library's
 //! measurement. The exception is `wee_alloc`, for which a fork based on commit
 //! f26c431df6f was used to make it compile on the latest nightly compiler. -->
+//!
+//! # Limitations
+//!
+//!  - **It does not support concurrent access.** A whole pool must be locked
+//!    for allocation and deallocation. If you use a FIFO lock to protect the
+//!    pool, the worst-case execution time will be `O(num_contending_threads)`.
+//!    You should consider using a thread-caching memory allocator (e.g.,
+//!    TCMalloc, jemalloc) if achieving a maximal throughput in a highly
+//!    concurrent environment is desired.
+//!
+//!  - **Free blocks cannot be returned to the underlying memory system
+//!    efficiently.**
 //!
 //! # Examples
 //!
