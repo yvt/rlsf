@@ -165,6 +165,21 @@ unsafe impl FlexSource for CgFlexSource {
     }
 }
 
+fn fill_data(p: NonNull<[u8]>) {
+    use std::mem::MaybeUninit;
+    let slice = unsafe { &mut *(p.as_ptr() as *mut [MaybeUninit<u8>]) };
+    for (i, p) in slice.iter_mut().enumerate() {
+        *p = MaybeUninit::new((i as u8).reverse_bits());
+    }
+}
+
+fn verify_data(p: NonNull<[u8]>) {
+    let slice = unsafe { p.as_ref() };
+    for (i, p) in slice.iter().enumerate() {
+        assert_eq!(*p, (i as u8).reverse_bits());
+    }
+}
+
 macro_rules! gen_test {
     ($mod:ident, $source:ty, $($tt:tt)*) => {
         mod $mod {
@@ -276,6 +291,9 @@ macro_rules! gen_test {
                             if let Some(ptr) = ptr {
                                 allocs.push(Alloc { ptr, layout });
                                 sa!().allocate(layout, ptr);
+
+                                // Fill it with dummy data
+                                fill_data(crate::utils::nonnull_slice_from_raw_parts(ptr, len));
                             }
                         }
                         3..=5 => {
@@ -283,6 +301,9 @@ macro_rules! gen_test {
                             if allocs.len() > 0 {
                                 let alloc = allocs.swap_remove(alloc_i as usize % allocs.len());
                                 log::trace!("dealloc {:?}", alloc);
+
+                                // Make sure the stored dummy data is not corrupted
+                                verify_data(crate::utils::nonnull_slice_from_raw_parts(alloc.ptr, alloc.layout.size()));
 
                                 unsafe { tlsf.deallocate(alloc.ptr, alloc.layout.align()) };
                                 sa!().deallocate(alloc.layout, alloc.ptr);
@@ -307,6 +328,11 @@ macro_rules! gen_test {
 
                                 if let Some(ptr) = unsafe { tlsf.reallocate(alloc.ptr, new_layout) } {
                                     log::trace!(" {:?} → {:?}", alloc.ptr, ptr);
+
+                                    // Check and refill the dummy data
+                                    verify_data(crate::utils::nonnull_slice_from_raw_parts(ptr, len.min(alloc.layout.size())));
+                                    fill_data(crate::utils::nonnull_slice_from_raw_parts(ptr, len));
+
                                     sa!().deallocate(alloc.layout, alloc.ptr);
                                     alloc.ptr = ptr;
                                     alloc.layout = new_layout;
