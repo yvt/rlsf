@@ -1250,8 +1250,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         );
 
         // Calculate the new block size
-        let overhead = new_ptr.as_ptr() as usize - prev_phys_block.as_ptr() as usize;
-        let new_size = overhead.checked_add(new_layout.size())?;
+        let new_overhead = new_ptr.as_ptr() as usize - prev_phys_block.as_ptr() as usize;
+        let new_size = new_overhead.checked_add(new_layout.size())?;
         let new_size = new_size.checked_add(GRANULARITY - 1)? & !(GRANULARITY - 1);
         if new_size > moving_clearance {
             // Can't fit

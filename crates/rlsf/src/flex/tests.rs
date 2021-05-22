@@ -157,6 +157,51 @@ macro_rules! gen_test {
                 }
             }
 
+            #[test]
+            fn aadaadaraaadr() {
+                let _ = env_logger::builder().is_test(true).try_init();
+
+                let mut tlsf = TheTlsf::default();
+
+                log::trace!("tlsf = {:?}", tlsf);
+
+                let ptr1 = tlsf.allocate(Layout::from_size_align(20, 16).unwrap());
+                log::trace!("ptr1 = {:?}", ptr1);
+                let ptr2 = tlsf.allocate(Layout::from_size_align(21, 1).unwrap());
+                log::trace!("ptr2 = {:?}", ptr2);
+                if let Some(ptr1) = ptr1 {
+                    unsafe { tlsf.deallocate(ptr1, 16) };
+                }
+                let ptr3 = tlsf.allocate(Layout::from_size_align(0, 32).unwrap());
+                log::trace!("ptr3 = {:?}", ptr3);
+                let ptr4 = tlsf.allocate(Layout::from_size_align(10, 8).unwrap());
+                log::trace!("ptr4 = {:?}", ptr4);
+                if let Some(ptr2) = ptr2 {
+                    unsafe { tlsf.deallocate(ptr2, 1) };
+                    log::trace!("deallocate(ptr2)");
+                }
+                let ptr5 = tlsf.allocate(Layout::from_size_align(12, 8).unwrap());
+                log::trace!("ptr5 = {:?}", ptr5);
+                let ptr3 = ptr3.and_then(|ptr3| unsafe {
+                    tlsf.reallocate(ptr3, Layout::from_size_align(0, 32).unwrap())
+                });
+                log::trace!("ptr3 = {:?}", ptr3);
+                let ptr6 = tlsf.allocate(Layout::from_size_align(24, 2).unwrap());
+                log::trace!("ptr6 = {:?}", ptr6);
+                let ptr7 = tlsf.allocate(Layout::from_size_align(11, 16).unwrap());
+                log::trace!("ptr7 = {:?}", ptr7);
+                let ptr8 = tlsf.allocate(Layout::from_size_align(1, 32).unwrap());
+                log::trace!("ptr8 = {:?}", ptr8);
+                if let Some(ptr5) = ptr5 {
+                    unsafe { tlsf.deallocate(ptr5, 8) };
+                    log::trace!("deallocate(ptr5)");
+                }
+                let ptr3 = ptr3.and_then(|ptr3| unsafe {
+                    tlsf.reallocate(ptr3, Layout::from_size_align(4, 32).unwrap())
+                });
+                log::trace!("ptr3 = {:?}", ptr3);
+            }
+
             #[quickcheck]
             fn random(max_alloc_size: usize, bytecode: Vec<u8>) {
                 random_inner(max_alloc_size, bytecode);
