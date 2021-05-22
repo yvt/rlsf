@@ -122,12 +122,12 @@ impl fmt::Debug for CgFlexSource {
 }
 
 impl TestFlexSource for CgFlexSource {
-    type Options = ();
+    type Options = u8;
 
-    fn new((): ()) -> Self {
+    fn new(offset: u8) -> Self {
         Self {
             pool: std::vec![0u8; 1024 * 32],
-            allocated: 0,
+            allocated: offset as usize,
         }
     }
 }
