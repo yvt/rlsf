@@ -143,12 +143,14 @@ macro_rules! if_supported_target {
     ) => {
         #[cfg(any(
             all(target_arch = "wasm32", not(target_feature = "atomics")),
+            unix,
             doc,
         ))]
         #[cfg_attr(
             feature = "doc_cfg",
             doc(cfg(any(
                 all(target_arch = "wasm32", not(target_feature = "atomics")),
+                unix,
                 // no `doc` here
             )))
         )]

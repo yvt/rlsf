@@ -22,10 +22,22 @@ if_supported_target! {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-mod wasm32;
-#[cfg(target_arch = "wasm32")]
-use self::wasm32 as os;
+cfg_if::cfg_if! {
+    if #[cfg(doc)] {
+        // don't compile `os` in rustdoc
+    } else if #[cfg(unix)] {
+        mod unix;
+        use self::unix as os;
+    } else if #[cfg(target_arch = "wasm32")] {
+        mod wasm32;
+        use self::wasm32 as os;
+    } else {
+        compile_error!(
+            "`crate::global` shouldn't be present when \
+            compiling for an unsupported target"
+        );
+    }
+}
 
 #[cfg(doc)]
 type TheTlsf<Options> = Options;
