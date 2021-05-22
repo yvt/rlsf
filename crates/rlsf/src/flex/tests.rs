@@ -7,10 +7,37 @@ use crate::{
     utils::{nonnull_slice_end, nonnull_slice_len},
 };
 
-#[derive(Debug, Default)]
+trait TestFlexSource: FlexSource {
+    type Options: quickcheck::Arbitrary;
+
+    fn new(options: Self::Options) -> Self;
+}
+
+impl<T: core::alloc::GlobalAlloc + Default, const ALIGN: usize> TestFlexSource
+    for GlobalAllocAsFlexSource<T, ALIGN>
+{
+    type Options = ();
+
+    fn new((): ()) -> Self {
+        Self(T::default())
+    }
+}
+
+#[derive(Debug)]
 struct TrackingFlexSource<T: FlexSource> {
     sa: ShadowAllocator,
     inner: T,
+}
+
+impl<T: TestFlexSource> TestFlexSource for TrackingFlexSource<T> {
+    type Options = T::Options;
+
+    fn new(options: T::Options) -> Self {
+        Self {
+            sa: ShadowAllocator::default(),
+            inner: T::new(options),
+        }
+    }
 }
 
 impl<T: FlexSource> Drop for TrackingFlexSource<T> {
@@ -94,8 +121,10 @@ impl fmt::Debug for CgFlexSource {
     }
 }
 
-impl Default for CgFlexSource {
-    fn default() -> Self {
+impl TestFlexSource for CgFlexSource {
+    type Options = ();
+
+    fn new((): ()) -> Self {
         Self {
             pool: std::vec![0u8; 1024 * 32],
             allocated: 0,
@@ -142,11 +171,11 @@ macro_rules! gen_test {
             use super::*;
             type TheTlsf = FlexTlsf<TrackingFlexSource<$source>, $($tt)*>;
 
-            #[test]
-            fn minimal() {
+            #[quickcheck]
+            fn minimal(source_options: <$source as TestFlexSource>::Options) {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf = TheTlsf::default();
+                let mut tlsf = TheTlsf::new(TrackingFlexSource::new(source_options));
 
                 log::trace!("tlsf = {:?}", tlsf);
 
@@ -157,11 +186,11 @@ macro_rules! gen_test {
                 }
             }
 
-            #[test]
-            fn aadaadaraaadr() {
+            #[quickcheck]
+            fn aadaadaraaadr(source_options: <$source as TestFlexSource>::Options) {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf = TheTlsf::default();
+                let mut tlsf = TheTlsf::new(TrackingFlexSource::new(source_options));
 
                 log::trace!("tlsf = {:?}", tlsf);
 
@@ -203,14 +232,14 @@ macro_rules! gen_test {
             }
 
             #[quickcheck]
-            fn random(max_alloc_size: usize, bytecode: Vec<u8>) {
-                random_inner(max_alloc_size, bytecode);
+            fn random(source_options: <$source as TestFlexSource>::Options, max_alloc_size: usize, bytecode: Vec<u8>) {
+                random_inner(source_options, max_alloc_size, bytecode);
             }
 
-            fn random_inner(max_alloc_size: usize, bytecode: Vec<u8>) -> Option<()> {
+            fn random_inner(source_options: <$source as TestFlexSource>::Options, max_alloc_size: usize, bytecode: Vec<u8>) -> Option<()> {
                 let max_alloc_size = max_alloc_size % 0x10000;
 
-                let mut tlsf = TheTlsf::default();
+                let mut tlsf = TheTlsf::new(TrackingFlexSource::new(source_options));
                 macro_rules! sa {
                     () => {
                         unsafe { tlsf.source_mut_unchecked() }.sa
