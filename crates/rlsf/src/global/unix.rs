@@ -1,4 +1,4 @@
-use crate::{utils::nonnull_slice_len, Init};
+use crate::Init;
 use core::{marker::PhantomData, ptr::NonNull};
 
 use super::GlobalTlsfOptions;
@@ -91,6 +91,8 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         ptr: NonNull<[u8]>,
         min_new_len: usize,
     ) -> Option<usize> {
+        use crate::utils::nonnull_slice_len;
+
         if !Options::COALESCE_POOLS {
             return None;
         }
