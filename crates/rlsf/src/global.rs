@@ -46,6 +46,7 @@ type TheTlsf<Options> =
     FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
 impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
+    #[allow(clippy::clippy::declare_interior_mutable_const)]
     const INIT: Self = Self::INIT;
 }
 
@@ -94,6 +95,7 @@ unsafe impl<Options: GlobalTlsfOptions> Sync for GlobalTlsf<Options> {}
 
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     /// The initializer.
+    #[allow(clippy::clippy::declare_interior_mutable_const)]
     pub const INIT: Self = Self {
         inner: UnsafeCell::new(Init::INIT),
         mutex: Init::INIT,

@@ -1,5 +1,8 @@
 use crate::Init;
-use core::{marker::PhantomData, ptr::NonNull};
+use core::{
+    marker::PhantomData,
+    ptr::{null_mut, NonNull},
+};
 
 use super::GlobalTlsfOptions;
 
@@ -65,7 +68,7 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         let num_bytes = min_size.checked_add(PAGE_SIZE_M1)? & !PAGE_SIZE_M1;
 
         let ptr = libc::mmap(
-            0 as *mut _,
+            null_mut(),
             num_bytes,
             libc::PROT_WRITE | libc::PROT_READ,
             libc::MAP_ANONYMOUS | libc::MAP_PRIVATE,
