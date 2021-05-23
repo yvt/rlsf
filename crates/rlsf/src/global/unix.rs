@@ -84,6 +84,8 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
     }
 
     #[inline]
+    // `MAP_FIXED_NOREPLACE` is only supported by Linux 4.17 and later.
+    #[cfg(target_os = "linux")]
     unsafe fn realloc_inplace_grow(
         &mut self,
         ptr: NonNull<[u8]>,
@@ -94,17 +96,33 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         }
 
         let num_bytes = min_new_len.checked_add(PAGE_SIZE_M1)? & !PAGE_SIZE_M1;
+        let num_growth_bytes = num_bytes - nonnull_slice_len(ptr);
 
-        let ptr_new = libc::mremap(ptr.as_ptr() as *mut _, nonnull_slice_len(ptr), num_bytes, 0);
-        if ptr_new == libc::MAP_FAILED {
+        let ptr_end = (ptr.as_ptr() as *mut u8).wrapping_add(nonnull_slice_len(ptr));
+
+        let ptr_growth_start = libc::mmap(
+            ptr_end as _,
+            num_growth_bytes,
+            libc::PROT_WRITE | libc::PROT_READ,
+            libc::MAP_ANONYMOUS | libc::MAP_PRIVATE | libc::MAP_FIXED_NOREPLACE,
+            -1,
+            0,
+        );
+
+        if ptr_growth_start != ptr_end as _ {
+            // We are on an old Linux kernel, and `MAP_FIXED_NOREPLACE` was
+            // not respected.
+            libc::munmap(ptr_growth_start, num_growth_bytes);
+            None
+        } else if ptr_growth_start == libc::MAP_FAILED {
             None
         } else {
-            debug_assert_eq!(ptr_new as *mut u8, ptr.as_ptr() as *mut u8);
             Some(num_bytes)
         }
     }
 
     #[inline]
+    #[cfg(target_os = "linux")]
     fn supports_realloc_inplace_grow(&self) -> bool {
         Options::COALESCE_POOLS
     }
