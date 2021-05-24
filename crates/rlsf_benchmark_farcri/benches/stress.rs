@@ -32,6 +32,23 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     bench_one(
         c,
+        "umm_malloc",
+        unsafe { ARENA.len() },
+        |arena_len| unsafe {
+            umm_malloc_sys::umm_init(ARENA.as_mut_ptr() as _, arena_len);
+        },
+        |_allocator, layout| unsafe {
+            // ignoring `layout.align()`
+            NonNull::new(umm_malloc_sys::umm_malloc(layout.size()))
+                .unwrap()
+                .cast()
+        },
+        |_allocator, p, _layout| unsafe { umm_malloc_sys::umm_free(p.as_ptr() as _) },
+    );
+    return;
+
+    bench_one(
+        c,
         "linked_list_allocator",
         unsafe { ARENA.len() },
         |arena_len| {
