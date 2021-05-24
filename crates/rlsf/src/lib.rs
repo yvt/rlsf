@@ -5,7 +5,7 @@
 //!    constant time.** TLSF is suitable for real-time applications.
 //!
 //!  - **Fast and small.** You can have both. It was found to be smaller and
-//!    faster² than three randomly chosen `no_std`-compatible allocator crates.
+//!    faster² than most `no_std`-compatible allocator crates.
 //!
 //!  - **The memory pool is provided by an application.** Examples of potential
 //!    memory pool sources include: a `static` array for global memory
