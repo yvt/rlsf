@@ -45,7 +45,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         },
         |_allocator, p, _layout| unsafe { umm_malloc_sys::umm_free(p.as_ptr() as _) },
     );
-    return;
 
     bench_one(
         c,
