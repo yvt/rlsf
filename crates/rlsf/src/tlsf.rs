@@ -14,6 +14,11 @@ use crate::{
     utils::{nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start},
 };
 
+/// The options for [`Tlsf`].
+pub trait TlsfOptions {}
+
+impl TlsfOptions for () {}
+
 #[cfg_attr(doc, svgbobdoc::transform)]
 /// The TLSF header (top-level) data structure.
 ///
@@ -64,24 +69,25 @@ use crate::{
 /// The maximum block size is `(GRANULARITY << FLLEN) - GRANULARITY`.
 ///
 #[derive(Debug)]
-pub struct Tlsf<'pool, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> {
+pub struct Tlsf<'pool, FLBitmap, SLBitmap, Options, const FLLEN: usize, const SLLEN: usize> {
     fl_bitmap: FLBitmap,
     /// `sl_bitmap[fl].get_bit(sl)` is set iff `first_free[fl][sl].is_some()`
     sl_bitmap: [SLBitmap; FLLEN],
     first_free: [[Option<NonNull<FreeBlockHdr>>; SLLEN]; FLLEN],
-    _phantom: PhantomData<&'pool mut ()>,
+    #[allow(clippy::type_complexity)]
+    _phantom: PhantomData<(&'pool mut (), fn() -> Options)>,
 }
 
 // Safety: All memory block headers directly or indirectly referenced by a
 //         particular instance of `Tlsf` are logically owned by that `Tlsf` and
 //         have no interior mutability, so these are safe.
-unsafe impl<FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> Send
-    for Tlsf<'_, FLBitmap, SLBitmap, FLLEN, SLLEN>
+unsafe impl<FLBitmap, SLBitmap, Options, const FLLEN: usize, const SLLEN: usize> Send
+    for Tlsf<'_, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
 }
 
-unsafe impl<FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> Sync
-    for Tlsf<'_, FLBitmap, SLBitmap, FLLEN, SLLEN>
+unsafe impl<FLBitmap, SLBitmap, Options, const FLLEN: usize, const SLLEN: usize> Sync
+    for Tlsf<'_, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
 }
 
@@ -174,16 +180,27 @@ struct UsedBlockHdr {
     common: BlockHdr,
 }
 
-impl<FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize> Default
-    for Tlsf<'_, FLBitmap, SLBitmap, FLLEN, SLLEN>
+impl<
+        FLBitmap: BinInteger,
+        SLBitmap: BinInteger,
+        Options: TlsfOptions,
+        const FLLEN: usize,
+        const SLLEN: usize,
+    > Default for Tlsf<'_, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     fn default() -> Self {
         Self::INIT
     }
 }
 
-impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize>
-    Tlsf<'pool, FLBitmap, SLBitmap, FLLEN, SLLEN>
+impl<
+        'pool,
+        FLBitmap: BinInteger,
+        SLBitmap: BinInteger,
+        Options: TlsfOptions,
+        const FLLEN: usize,
+        const SLLEN: usize,
+    > Tlsf<'pool, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     // FIXME: Add `const fn new()` when `const fn`s with type bounds are stabilized
     /// An empty pool.
@@ -426,7 +443,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// use rlsf::Tlsf;
     /// use std::{mem::MaybeUninit, ptr::NonNull};
     /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, (), 8, 8> = Tlsf::INIT;
     /// unsafe {
     ///     tlsf.insert_free_block_ptr(NonNull::new(POOL.as_mut_ptr()).unwrap());
     /// }
@@ -552,7 +569,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// let mut cursor = unsafe { POOL.as_mut_ptr() } as *mut u8;
     /// let mut remaining_len = 1024;
     ///
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, (), 8, 8> = Tlsf::INIT;
     /// let pool0_len = unsafe {
     ///     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
     ///         NonNull::new(cursor).unwrap(), remaining_len / 2))
@@ -692,7 +709,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// use rlsf::Tlsf;
     /// use std::mem::MaybeUninit;
     /// let mut pool = [MaybeUninit::uninit(); 1024];
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, (), 8, 8> = Tlsf::INIT;
     /// tlsf.insert_free_block(&mut pool);
     /// ```
     ///

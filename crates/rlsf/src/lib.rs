@@ -70,11 +70,11 @@
 //! // On 32-bit systems, the maximum block size is 16 << FLLEN = 65536 bytes.
 //! // The worst-case fragmentation is (16 << FLLEN) / SLLEN - 2 = 4094 bytes.
 //! // `'pool` represents the memory pool's lifetime (`pool` in this case).
-//! let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
-//! //                 ^^            ^^  ^^
-//! //                  |             |  |
-//! //                'pool           |  SLLEN
-//! //                               FLLEN
+//! let mut tlsf: Tlsf<'_, u16, u16, (), 12, 16> = Tlsf::INIT;
+//! //                 ^^                ^^  ^^
+//! //                  |                 |  |
+//! //                'pool               |  SLLEN
+//! //                                   FLLEN
 //! tlsf.insert_free_block(&mut pool);
 //!
 //! unsafe {
@@ -133,7 +133,7 @@ mod utils;
 pub use self::{
     flex::*,
     init::*,
-    tlsf::{Tlsf, GRANULARITY},
+    tlsf::{Tlsf, TlsfOptions, GRANULARITY},
 };
 
 /// Attaches `#[cfg(...)]` and `#[doc(cfg(...))]` to a given item definition

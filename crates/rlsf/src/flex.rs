@@ -6,7 +6,7 @@ use super::{
     utils::{
         nonnull_slice_end, nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start,
     },
-    Init, Tlsf, GRANULARITY,
+    Init, Tlsf, TlsfOptions, GRANULARITY,
 };
 
 /// The trait for dynamic storage allocators that can back [`FlexTlsf`].
@@ -179,12 +179,18 @@ unsafe impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> FlexSource
 /// A wrapper of [`Tlsf`] that automatically acquires fresh memory pools from
 /// [`FlexSource`].
 #[derive(Debug)]
-pub struct FlexTlsf<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize>
-{
+pub struct FlexTlsf<
+    Source: FlexSource,
+    FLBitmap,
+    SLBitmap,
+    Options,
+    const FLLEN: usize,
+    const SLLEN: usize,
+> {
     /// The lastly created memory pool.
     growable_pool: Option<Pool>,
     source: Source,
-    tlsf: Tlsf<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>,
+    tlsf: Tlsf<'static, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -239,9 +245,10 @@ impl<
         Source: FlexSource + Default,
         FLBitmap: BinInteger,
         SLBitmap: BinInteger,
+        Options: TlsfOptions,
         const FLLEN: usize,
         const SLLEN: usize,
-    > Default for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
+    > Default for FlexTlsf<Source, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     #[inline]
     fn default() -> Self {
@@ -258,9 +265,10 @@ impl<
         Source: FlexSource + Init,
         FLBitmap: BinInteger,
         SLBitmap: BinInteger,
+        Options: TlsfOptions,
         const FLLEN: usize,
         const SLLEN: usize,
-    > Init for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
+    > Init for FlexTlsf<Source, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     // FIXME: Add `const fn new()` when `const fn`s with type bounds are stabilized
     /// An empty pool.
@@ -275,9 +283,10 @@ impl<
         Source: FlexSource,
         FLBitmap: BinInteger,
         SLBitmap: BinInteger,
+        Options: TlsfOptions,
         const FLLEN: usize,
         const SLLEN: usize,
-    > FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
+    > FlexTlsf<Source, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     /// Construct a new `FlexTlsf` object.
     #[inline]
@@ -345,7 +354,7 @@ impl<
         // How many extra bytes we need to get from the source for the
         // allocation to success?
         let extra_bytes_well_aligned =
-            Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::pool_size_to_contain_allocation(
+            Tlsf::<'static, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>::pool_size_to_contain_allocation(
                 layout,
             )?;
 
@@ -551,10 +560,11 @@ impl<
         // Do this early so that the compiler can de-duplicate the evaluation of
         // `size_of_allocation`, which is done here as well as in
         // `Tlsf::reallocate`.
-        let old_size = Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::size_of_allocation(
-            ptr,
-            new_layout.align(),
-        );
+        let old_size =
+            Tlsf::<'static, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>::size_of_allocation(
+                ptr,
+                new_layout.align(),
+            );
 
         // Safety: Upheld by the caller
         if let Some(x) = self.tlsf.reallocate(ptr, new_layout) {
@@ -578,8 +588,8 @@ impl<
     }
 }
 
-impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> Drop
-    for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
+impl<Source: FlexSource, FLBitmap, SLBitmap, Options, const FLLEN: usize, const SLLEN: usize> Drop
+    for FlexTlsf<Source, FLBitmap, SLBitmap, Options, FLLEN, SLLEN>
 {
     fn drop(&mut self) {
         if self.source.supports_dealloc() {

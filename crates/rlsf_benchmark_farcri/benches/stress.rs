@@ -21,7 +21,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         "rlsf",
         unsafe { ARENA.len() },
         |arena_len| {
-            let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
+            let mut tlsf: Tlsf<'_, u16, u16, (), 12, 16> = Tlsf::INIT;
             let arena = unsafe { &mut ARENA[..arena_len] };
             tlsf.insert_free_block(&mut *arena);
             tlsf

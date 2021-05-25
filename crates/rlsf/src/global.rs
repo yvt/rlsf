@@ -42,8 +42,14 @@ cfg_if::cfg_if! {
 #[cfg(doc)]
 type TheTlsf<Options> = Options;
 #[cfg(not(doc))]
-type TheTlsf<Options> =
-    FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
+type TheTlsf<Options> = FlexTlsf<
+    os::Source<Options>,
+    usize,
+    usize,
+    (),
+    { USIZE_BITS as usize },
+    { USIZE_BITS as usize },
+>;
 
 impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
     #[allow(clippy::clippy::declare_interior_mutable_const)]
