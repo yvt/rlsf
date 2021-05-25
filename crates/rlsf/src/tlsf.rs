@@ -14,6 +14,8 @@ use crate::{
     utils::{nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start},
 };
 
+mod map;
+
 /// The options for [`Tlsf`].
 pub trait TlsfOptions {}
 
@@ -248,83 +250,27 @@ impl<
         }
     };
 
-    /// `SLLEN.log2()`
-    const SLI: u32 = if SLLEN.is_power_of_two() {
-        SLLEN.trailing_zeros()
-    } else {
-        const_panic!("`SLLEN` is not power of two")
+    const MAP_PARAMS: map::MapParams = map::MapParams {
+        sli: if SLLEN.is_power_of_two() {
+            SLLEN.trailing_zeros()
+        } else {
+            const_panic!("`SLLEN` is not power of two")
+        },
+        fllen: FLLEN,
     };
 
     /// Find the free block list to store a free block of the specified size.
     #[inline]
     fn map_floor(size: usize) -> Option<(usize, usize)> {
-        debug_assert!(size >= GRANULARITY);
-        debug_assert!(size % GRANULARITY == 0);
-        let fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
-
-        let sl = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
-            size << ((Self::SLI - GRANULARITY_LOG2) - fl)
-        } else {
-            let sl = size >> (fl + GRANULARITY_LOG2 - Self::SLI);
-
-            // The most significant one of `size` should be at `sl[SLI]`
-            debug_assert!((sl >> Self::SLI) == 1);
-
-            sl
-        };
-
-        // `fl` must be in a valid range
-        if fl as usize >= FLLEN {
-            return None;
-        }
-
-        Some((fl as usize, sl & (SLLEN - 1)))
+        Self::MAP_PARAMS.map_floor(size)
     }
 
     /// Find the first free block list whose every item is at least as large
     /// as the specified size.
     #[inline]
     fn map_ceil(size: usize) -> Option<(usize, usize)> {
-        debug_assert!(size >= GRANULARITY);
-        debug_assert!(size % GRANULARITY == 0);
-        let mut fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
-
-        let sl = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
-            size << ((Self::SLI - GRANULARITY_LOG2) - fl)
-        } else {
-            let mut sl = size >> (fl + GRANULARITY_LOG2 - Self::SLI);
-
-            // round up (this is specific to `map_ceil`)
-            sl += (sl << (fl + GRANULARITY_LOG2 - Self::SLI) != size) as usize;
-
-            debug_assert!((sl >> Self::SLI) == 0b01 || (sl >> Self::SLI) == 0b10);
-
-            // if sl[SLI + 1] { fl += 1; sl = 0; }
-            fl += (sl >> (Self::SLI + 1)) as u32;
-
-            sl
-        };
-
-        // `fl` must be in a valid range
-        if fl as usize >= FLLEN {
-            return None;
-        }
-
-        Some((fl as usize, sl & (SLLEN - 1)))
+        Self::MAP_PARAMS.map_ceil(size)
     }
-
-    const MAX_MAP_CEIL_AND_UNMAP_INPUT: usize = {
-        // The maximum value for which `map_ceil(x)` returns `(USIZE_BITS -
-        // GRANULARITY_LOG2 - 1, _)`, assuming `FLLEN == ∞`
-        let max1 = !(usize::MAX >> (Self::SLI + 1));
-
-        // Now take into account the fact that `FLLEN` is not actually infinity
-        if FLLEN as u32 - 1 < USIZE_BITS - GRANULARITY_LOG2 - 1 {
-            max1 >> ((USIZE_BITS - GRANULARITY_LOG2 - 1) - (FLLEN as u32 - 1))
-        } else {
-            max1
-        }
-    };
 
     /// Find the first free block list whose every item is at least as large
     /// as the specified size and get the list's minimum size. Returns `None`
@@ -332,25 +278,7 @@ impl<
     /// representable in `usize`.
     #[inline]
     fn map_ceil_and_unmap(size: usize) -> Option<usize> {
-        debug_assert!(size >= GRANULARITY);
-        debug_assert!(size % GRANULARITY == 0);
-
-        if size > Self::MAX_MAP_CEIL_AND_UNMAP_INPUT {
-            return None;
-        }
-
-        let fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
-
-        let list_min_size = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
-            size
-        } else {
-            let shift = fl + GRANULARITY_LOG2 - Self::SLI;
-
-            // round up
-            (size + ((1 << shift) - 1)) & !((1 << shift) - 1)
-        };
-
-        Some(list_min_size)
+        Self::MAP_PARAMS.map_ceil_and_unmap(size)
     }
 
     /// Insert the specified free block to the corresponding free block list.
