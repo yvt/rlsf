@@ -245,16 +245,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         debug_assert!(size % GRANULARITY == 0);
         let fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
 
-        let sl = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
-            size << ((Self::SLI - GRANULARITY_LOG2) - fl)
-        } else {
-            let sl = size >> (fl + GRANULARITY_LOG2 - Self::SLI);
+        // The shift amount can be negative, and rotation lets us handle both
+        // cases without branching. Underflowed digits can be simply masked out
+        // in `map_floor`.
+        let sl = size.rotate_right((fl + GRANULARITY_LOG2).wrapping_sub(Self::SLI));
 
-            // The most significant one of `size` should be at `sl[SLI]`
-            debug_assert!((sl >> Self::SLI) == 1);
-
-            sl
-        };
+        // The most significant one of `size` should be now at `sl[SLI]`
+        debug_assert!(((sl >> Self::SLI) & 1) == 1);
 
         // `fl` must be in a valid range
         if fl as usize >= FLLEN {
@@ -272,21 +269,19 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         debug_assert!(size % GRANULARITY == 0);
         let mut fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
 
-        let sl = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
-            size << ((Self::SLI - GRANULARITY_LOG2) - fl)
-        } else {
-            let mut sl = size >> (fl + GRANULARITY_LOG2 - Self::SLI);
+        // The shift amount can be negative, and rotation lets us handle both
+        // cases without branching.
+        let mut sl = size.rotate_right((fl + GRANULARITY_LOG2).wrapping_sub(Self::SLI));
 
-            // round up (this is specific to `map_ceil`)
-            sl += (sl << (fl + GRANULARITY_LOG2 - Self::SLI) != size) as usize;
+        // The most significant one of `size` should be now at `sl[SLI]`
+        debug_assert!(((sl >> Self::SLI) & 1) == 1);
 
-            debug_assert!((sl >> Self::SLI) == 0b01 || (sl >> Self::SLI) == 0b10);
+        // Underflowed digits appear in `sl[SLI + 1..USIZE-BITS]`. They should
+        // be rounded up
+        sl = (sl & (SLLEN - 1)) + (sl >= (1 << (Self::SLI + 1))) as usize;
 
-            // if sl[SLI + 1] { fl += 1; sl = 0; }
-            fl += (sl >> (Self::SLI + 1)) as u32;
-
-            sl
-        };
+        // if sl[SLI] { fl += 1; sl = 0; }
+        fl += (sl >> Self::SLI) as u32;
 
         // `fl` must be in a valid range
         if fl as usize >= FLLEN {
