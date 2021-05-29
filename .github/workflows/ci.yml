@@ -50,12 +50,12 @@ jobs:
           command: test
           args: -p rlsf --features std
 
-      - name: cargo test--target wasm32-wasi
+      - name: cargo test --target wasm32-wasi
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --target wasm32-wasi -p rlsf
-      - name: cargo test--target wasm32-wasi  --features std
+      - name: cargo test --target wasm32-wasi --features std
         uses: actions-rs/cargo@v1
         with:
           command: test
