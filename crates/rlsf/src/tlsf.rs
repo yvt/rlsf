@@ -1115,6 +1115,28 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         block_end - payload_start
     }
 
+    /// Get the payload size of the allocation with an unknown alignment. The
+    /// returned size might be larger than the size specified at the allocation
+    /// time.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated via `Self`.
+    ///
+    #[inline]
+    pub(crate) unsafe fn size_of_allocation_unknown_align(ptr: NonNull<u8>) -> usize {
+        // Safety: `ptr` is a previously allocated memory block.
+        //         This is upheld by the caller.
+        let block = Self::used_block_hdr_for_allocation_unknown_align(ptr);
+
+        let size = block.as_ref().common.size - SIZE_USED;
+        debug_assert_eq!(size, block.as_ref().common.size & SIZE_SIZE_MASK);
+
+        let block_end = block.as_ptr() as usize + size;
+        let payload_start = ptr.as_ptr() as usize;
+        block_end - payload_start
+    }
+
     // TODO: `reallocate_no_move` (constant-time reallocation)
 
     /// Shrink or grow a previously allocated memory block.
