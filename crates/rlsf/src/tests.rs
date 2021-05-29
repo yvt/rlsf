@@ -25,6 +25,12 @@ impl ShadowAllocator {
         }
     }
 
+    pub fn new_filled_with_free() -> Self {
+        Self {
+            regions: Some((0, SaRegion::Free)).into_iter().collect(),
+        }
+    }
+
     pub fn convert_range(
         &mut self,
         range: Range<usize>,

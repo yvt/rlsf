@@ -527,6 +527,25 @@ impl<
         self.tlsf.deallocate(ptr, align)
     }
 
+    /// Deallocate a previously allocated memory block with an unknown alignment.
+    ///
+    /// Unlike `deallocate`, this function does not require knowing the
+    /// allocation's alignment but might be less efficient.
+    ///
+    /// # Time Complexity
+    ///
+    /// This method will complete in constant time (assuming `Source`'s methods
+    /// do so as well).
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated via `self`.
+    ///
+    pub(crate) unsafe fn deallocate_unknown_align(&mut self, ptr: NonNull<u8>) {
+        // Safety: Upheld by the caller
+        self.tlsf.deallocate_unknown_align(ptr)
+    }
+
     /// Shrink or grow a previously allocated memory block.
     ///
     /// Returns the new starting address of the memory block on success;
@@ -575,6 +594,20 @@ impl<
         self.deallocate(ptr, new_layout.align());
 
         Some(new_ptr)
+    }
+
+    /// Get the payload size of the allocation with an unknown alignment. The
+    /// returned size might be larger than the size specified at the allocation
+    /// time.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated via `Self`.
+    ///
+    #[inline]
+    pub(crate) unsafe fn size_of_allocation_unknown_align(ptr: NonNull<u8>) -> usize {
+        // Safety: Upheld by the caller
+        Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::size_of_allocation_unknown_align(ptr)
     }
 }
 

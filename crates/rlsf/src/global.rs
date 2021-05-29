@@ -192,3 +192,79 @@ unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Option
         }
     }
 }
+
+/// Provides allocation functions modelled after the standard C and POSIX
+/// allocation functions (e.g., `malloc`, `memalign`).
+///
+/// Note that this trait might require a less efficient implementation than
+/// [`core::alloc::GlobalAlloc`]. This applies to [`GlobalTlsf`].
+pub unsafe trait CAlloc {
+    /// Allocate a memory block.
+    ///
+    /// Returns the starting address of the allocated memory block on success;
+    /// `None` otherwise.
+    fn allocate(&self, layout: alloc::Layout) -> Option<NonNull<u8>>;
+
+    /// Deallocate a previously allocated memory block.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated by calling
+    ///    [`Self::allocate`] on `self`.
+    ///
+    unsafe fn deallocate(&self, ptr: NonNull<u8>);
+
+    /// Shrink or grow a previously allocated memory block.
+    ///
+    /// Returns the new starting address of the memory block on success;
+    /// `None` otherwise.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated by calling
+    ///    [`Self::allocate`] on `self`.
+    ///
+    unsafe fn reallocate(&self, ptr: NonNull<u8>, new_layout: alloc::Layout)
+        -> Option<NonNull<u8>>;
+}
+
+unsafe impl<Options: GlobalTlsfOptions> CAlloc for GlobalTlsf<Options> {
+    fn allocate(&self, layout: alloc::Layout) -> Option<NonNull<u8>> {
+        let mut inner = self.lock_inner();
+        inner.allocate(layout)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>) {
+        let mut inner = self.lock_inner();
+        // Safety: `ptr` denotes a previous allocation
+        inner.deallocate_unknown_align(ptr);
+    }
+
+    unsafe fn reallocate(
+        &self,
+        ptr: NonNull<u8>,
+        new_layout: alloc::Layout,
+    ) -> Option<NonNull<u8>> {
+        let mut inner = self.lock_inner();
+        if let Some(new_ptr) = inner.allocate(new_layout) {
+            // Safety: `ptr` denotes a previous allocation
+            let old_size = TheTlsf::<Options>::size_of_allocation_unknown_align(ptr);
+            // Safety: the previously allocated block cannot overlap the
+            //         newly allocated block.
+            //         The safety contract for `deallocate` must be upheld
+            //         by the caller.
+            ptr::copy_nonoverlapping(
+                ptr.as_ptr(),
+                new_ptr.as_ptr(),
+                new_layout.size().min(old_size),
+            );
+            inner.deallocate_unknown_align(ptr);
+            Some(new_ptr)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;
