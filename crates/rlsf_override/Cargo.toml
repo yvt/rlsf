@@ -1,0 +1,20 @@
+[package]
+name = "rlsf_override"
+version = "0.1.0"
+authors = ["yvt <i@yvt.jp>"]
+license = "MIT/Apache-2.0"
+edition = "2018"
+description = "Overrides C memory allocation functions with `rlsf`"
+repository = "https://github.com/yvt/rlsf"
+publish = false  # still experimental
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+path = "src/lib.rs"
+
+[dependencies]
+rlsf = { version = "0.1.1", path = "../rlsf" }
+libc = "0.2.50"
+
+[dev-dependencies]
+bzip2 = "0.4"
