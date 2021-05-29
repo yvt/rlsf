@@ -781,7 +781,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             let (fl, sl) = self.search_suitable_free_block_list_for_allocation(search_size)?;
 
             // Get a free block: `block`
-            let first_free = &mut self.first_free[fl][sl];
+            let first_free = self.first_free.get_unchecked_mut(fl).get_unchecked_mut(sl);
             let block = first_free.unwrap_or_else(|| {
                 debug_assert!(false, "bitmap outdated");
                 // Safety: It's unreachable
@@ -801,8 +801,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 next_free.as_mut().prev_free = None;
             } else {
                 // The free list is now empty - update the bitmap
-                self.sl_bitmap[fl].clear_bit(sl as u32);
-                if self.sl_bitmap[fl] == SLBitmap::ZERO {
+                let sl_bitmap = self.sl_bitmap.get_unchecked_mut(fl);
+                sl_bitmap.clear_bit(sl as u32);
+                if *sl_bitmap == SLBitmap::ZERO {
                     self.fl_bitmap.clear_bit(fl as u32);
                 }
             }
