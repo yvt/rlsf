@@ -174,7 +174,6 @@ unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Option
                 .map(NonNull::as_ptr)
                 .unwrap_or(ptr::null_mut())
         } else {
-            // Safety: the caller must ensure that `new_layout` is greater than zero.
             if let Some(new_ptr) = inner.allocate(new_layout) {
                 // Safety: the previously allocated block cannot overlap the
                 //         newly allocated block.
