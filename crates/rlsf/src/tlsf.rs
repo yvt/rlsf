@@ -1097,7 +1097,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ///
     /// # Safety
     ///
-    ///  - `ptr` must denote a memory block previously allocated via `self`.
+    ///  - `ptr` must denote a memory block previously allocated via `Self`.
     ///  - The memory block must have been allocated with the same alignment
     ///    ([`Layout::align`]) as `align`.
     ///
