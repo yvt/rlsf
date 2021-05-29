@@ -166,12 +166,26 @@ struct FreeBlockHdr {
 /// The payload immediately follows this header. However, if the alignment
 /// requirement is greater than or equal to [`GRANULARITY`], an up to
 /// `align - GRANULARITY / 2` bytes long padding will be inserted between them,
-/// and the last word of the padding will encode where the header is located.
-/// (See `used_block_hdr_for_allocation`)
+/// and the last part of the padding ([`UsedBlockPad`]) will encode where the
+/// header is located.
 #[repr(C)]
 #[derive(Debug)]
 struct UsedBlockHdr {
     common: BlockHdr,
+}
+
+/// In a used memory block with an alignment requirement larger than or equal to
+/// `GRANULARITY`, the payload is preceded by this structure.
+#[derive(Debug)]
+struct UsedBlockPad {
+    block_hdr: NonNull<UsedBlockHdr>,
+}
+
+impl UsedBlockPad {
+    #[inline]
+    fn get_for_allocation(ptr: NonNull<u8>) -> *mut Self {
+        ptr.cast::<Self>().as_ptr().wrapping_sub(1)
+    }
 }
 
 impl<FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize> Default
@@ -803,11 +817,6 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 debug_assert_ne!(unaligned_ptr, ptr.as_ptr() as usize);
             }
 
-            // Place a header pointer (used by `used_block_hdr_for_allocation`)
-            if layout.align() >= GRANULARITY {
-                *ptr.cast::<NonNull<_>>().as_ptr().sub(1) = block;
-            }
-
             // Calculate the actual overhead and the final block size of the
             // used block being created here
             let overhead = ptr.as_ptr() as usize - block.as_ptr() as usize;
@@ -847,6 +856,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             // header. `prev_phys_block` is already set.
             let mut block = block.cast::<UsedBlockHdr>();
             block.as_mut().common.size = new_size | SIZE_USED;
+
+            // Place a `UsedBlockPad` (used by `used_block_hdr_for_allocation`)
+            if layout.align() >= GRANULARITY {
+                (*UsedBlockPad::get_for_allocation(ptr)).block_hdr = block;
+            }
 
             Some(ptr)
         }
@@ -903,8 +917,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         align: usize,
     ) -> NonNull<UsedBlockHdr> {
         if align >= GRANULARITY {
-            // Read the header pointer at `ptr - USIZE_LEN`
-            *ptr.cast::<NonNull<UsedBlockHdr>>().as_ptr().sub(1)
+            // Read the header pointer
+            (*UsedBlockPad::get_for_allocation(ptr)).block_hdr
         } else {
             NonNull::new_unchecked(ptr.as_ptr().sub(GRANULARITY / 2)).cast()
         }
@@ -1322,7 +1336,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Place a header pointer (used by `used_block_hdr_for_allocation`)
         if new_layout.align() >= GRANULARITY {
-            *new_ptr.cast::<NonNull<_>>().as_ptr().sub(1) = new_block;
+            (*UsedBlockPad::get_for_allocation(new_ptr)).block_hdr = new_block;
         }
 
         Some(new_ptr)
