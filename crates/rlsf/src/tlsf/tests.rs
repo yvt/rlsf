@@ -246,10 +246,15 @@ macro_rules! gen_test {
                         3..=5 => {
                             let alloc_i = it.next()?;
                             if allocs.len() > 0 {
+                                let provide_align = (alloc_i as usize / allocs.len()) % 2 == 0;
                                 let alloc = allocs.swap_remove(alloc_i as usize % allocs.len());
                                 log::trace!("dealloc {:?}", alloc);
 
-                                unsafe { tlsf.deallocate(alloc.ptr, alloc.layout.align()) };
+                                if provide_align {
+                                    unsafe { tlsf.deallocate(alloc.ptr, alloc.layout.align()) };
+                                } else {
+                                    unsafe { tlsf.deallocate_unknown_align(alloc.ptr) };
+                                }
                                 sa.deallocate(alloc.layout, alloc.ptr);
                             }
                         }
