@@ -18,7 +18,7 @@ svgbobdoc = { version = "0.2.2" }
 cfg-if = "1.0.0"
 
 [target."cfg(unix)".dependencies]
-libc = "0.2.0"
+libc = "0.2.56"
 
 [dev-dependencies]
 quickcheck_macros = "0.9.1"

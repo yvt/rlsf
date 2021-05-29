@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Performance and code size optimization
 - **Added:** `GlobalTlsf` now provides a `malloc`-compatible interface.
+- **Fixed:** Raised the version requirement of `libc` to 0.2.56, where `MAP_FIXED_NOREPLACE` was added.
 
 ## [0.1.1] - 2021-05-23
 
