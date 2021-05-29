@@ -173,22 +173,16 @@ unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Option
                 .reallocate(ptr, new_layout)
                 .map(NonNull::as_ptr)
                 .unwrap_or(ptr::null_mut())
+        } else if let Some(new_ptr) = inner.allocate(new_layout) {
+            // Safety: the previously allocated block cannot overlap the
+            //         newly allocated block.
+            //         The safety contract for `deallocate` must be upheld
+            //         by the caller.
+            ptr::copy_nonoverlapping(ptr.as_ptr(), new_ptr.as_ptr(), layout.size().min(new_size));
+            inner.deallocate(ptr, layout.align());
+            new_ptr.as_ptr()
         } else {
-            if let Some(new_ptr) = inner.allocate(new_layout) {
-                // Safety: the previously allocated block cannot overlap the
-                //         newly allocated block.
-                //         The safety contract for `deallocate` must be upheld
-                //         by the caller.
-                ptr::copy_nonoverlapping(
-                    ptr.as_ptr(),
-                    new_ptr.as_ptr(),
-                    layout.size().min(new_size),
-                );
-                inner.deallocate(ptr, layout.align());
-                new_ptr.as_ptr()
-            } else {
-                ptr::null_mut()
-            }
+            ptr::null_mut()
         }
     }
 }
