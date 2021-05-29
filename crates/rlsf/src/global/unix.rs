@@ -24,12 +24,7 @@ static mut MUTEX: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
 impl Mutex {
     #[inline]
     pub fn lock(&self) {
-        unsafe {
-            libc::pthread_mutex_lock(&mut MUTEX);
-            if PAGE_SIZE_M1 == 0 {
-                init_page_size();
-            }
-        }
+        unsafe { libc::pthread_mutex_lock(&mut MUTEX) };
     }
 
     #[inline]
@@ -47,7 +42,7 @@ impl<Options> Init for Source<Options> {
 /// The memory page size minus 1. Set by `Mutex::lock`.
 static mut PAGE_SIZE_M1: usize = 0;
 #[cold]
-fn init_page_size() {
+fn init_page_size() -> usize {
     unsafe {
         let page_size = (libc::sysconf(libc::_SC_PAGESIZE) as usize).max(ALLOC_UNIT);
         if !page_size.is_power_of_two() {
@@ -59,13 +54,28 @@ fn init_page_size() {
         if page_size < MIN_ALIGN {
             libc::abort();
         }
+
+        PAGE_SIZE_M1
+    }
+}
+
+#[inline]
+fn ensure_page_size_m1() -> usize {
+    let page_size_m1 = unsafe { PAGE_SIZE_M1 };
+    if page_size_m1 == 0 {
+        // `init_page_size` returns the initialized value for
+        // code size optimization
+        init_page_size()
+    } else {
+        page_size_m1
     }
 }
 
 unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Options> {
     #[inline]
     unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
-        let num_bytes = min_size.checked_add(PAGE_SIZE_M1)? & !PAGE_SIZE_M1;
+        let page_size_m1 = ensure_page_size_m1();
+        let num_bytes = min_size.checked_add(page_size_m1)? & !page_size_m1;
 
         let ptr = libc::mmap(
             null_mut(),
@@ -100,7 +110,8 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
             return None;
         }
 
-        let num_bytes = min_new_len.checked_add(PAGE_SIZE_M1)? & !PAGE_SIZE_M1;
+        let page_size_m1 = ensure_page_size_m1();
+        let num_bytes = min_new_len.checked_add(page_size_m1)? & !page_size_m1;
         let num_growth_bytes = num_bytes - nonnull_slice_len(ptr);
 
         let ptr_end = (ptr.as_ptr() as *mut u8).wrapping_add(nonnull_slice_len(ptr));
