@@ -939,7 +939,14 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, align: usize) {
         // Safety: `ptr` is a previously allocated memory block with the same
         //         alignment as `align`. This is upheld by the caller.
-        let mut block = Self::used_block_hdr_for_allocation(ptr, align).cast::<BlockHdr>();
+        let block = Self::used_block_hdr_for_allocation(ptr, align).cast::<BlockHdr>();
+        self.deallocate_block(block);
+    }
+
+    /// Deallocate a previously allocated memory block. Takes a pointer to
+    /// `BlockHdr` instead of a payload pointer.
+    #[inline]
+    unsafe fn deallocate_block(&mut self, mut block: NonNull<BlockHdr>) {
         let mut size = block.as_ref().size & !SIZE_USED;
         debug_assert!((block.as_ref().size & SIZE_USED) != 0);
 
