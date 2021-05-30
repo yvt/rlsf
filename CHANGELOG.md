@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.1.2] - 2021-05-30
+
 - Performance and code size optimization
 - **Added:** `GlobalTlsf` now provides a `malloc`-compatible interface.
 - **Fixed:** Raised the version requirement of `libc` to 0.2.56, where `MAP_FIXED_NOREPLACE` was added.
@@ -20,5 +22,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial release.
 
-[Unreleased]: https://github.com/yvt/rlsf/compare/0.1.1...HEAD
+[Unreleased]: https://github.com/yvt/rlsf/compare/0.1.2...HEAD
+[0.1.2]: https://github.com/yvt/rlsf/compare/0.1.1...0.1.2
 [0.1.1]: https://github.com/yvt/rlsf/compare/0.1.0...0.1.1
