@@ -71,7 +71,7 @@ fn page_size() -> usize {
 
 #[no_mangle]
 pub unsafe extern "C" fn valloc(size: usize) -> *mut c_void {
-    aligned_alloc(page_size(), size) // TODO
+    aligned_alloc(page_size(), size)
 }
 
 #[no_mangle]
