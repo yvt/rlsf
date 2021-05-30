@@ -50,6 +50,12 @@ jobs:
           command: test
           args: -p rlsf --features std
 
+      - name: Override the test enviroment's memory allocator
+        run: |
+          cargo build -p rlsf_override --release
+          stat "`pwd`/target/release/librlsf_override.so"
+          echo "LD_PRELOAD=`pwd`/target/release/librlsf_override.so" >> $GITHUB_ENV
+
       - name: cargo test --target wasm32-wasi
         uses: actions-rs/cargo@v1
         with:
