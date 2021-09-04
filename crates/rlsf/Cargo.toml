@@ -13,6 +13,7 @@ repository = "https://github.com/yvt/rlsf"
 [features]
 doc_cfg = []
 std = []
+unstable = []
 
 [dependencies]
 svgbobdoc = { version = "0.2.2" }

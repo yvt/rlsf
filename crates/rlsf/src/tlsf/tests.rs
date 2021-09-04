@@ -7,6 +7,34 @@ use crate::{tests::ShadowAllocator, utils::nonnull_slice_from_raw_parts};
 #[repr(align(64))]
 struct Align<T>(T);
 
+/// Dump the output of `iter_blocks` in a separate module so that it can be
+/// filtered separately with `env_logger`
+mod blocks_checker {
+    use super::*;
+    use std::ptr::NonNull;
+
+    pub unsafe fn trace_blocks<const FLLEN: usize, const SLLEN: usize>(
+        pool_ptr: *mut u8,
+        pool_len: Option<usize>,
+        tlsf: &Tlsf<'_, impl BinInteger, impl BinInteger, FLLEN, SLLEN>,
+    ) {
+        #[cfg(feature = "unstable")]
+        {
+            let pool_len = if let Some(pool_len) = pool_len {
+                pool_len
+            } else {
+                return;
+            };
+            let pool_ptr = nonnull_slice_from_raw_parts(NonNull::new(pool_ptr).unwrap(), pool_len);
+
+            // Unconditionally enumerate all blocks to see that it doesn't crash
+            let blocks: Vec<_> = tlsf.iter_blocks(pool_ptr).collect();
+
+            log::trace!("blocks = {:?}", blocks);
+        }
+    }
+}
+
 macro_rules! gen_test {
     ($mod:ident, $($tt:tt)*) => {
         mod $mod {
@@ -320,6 +348,9 @@ macro_rules! gen_test {
                         }
                         _ => unreachable!(),
                     }
+
+                    // Scan all blocks for every iteration
+                    unsafe { blocks_checker::trace_blocks(pool_ptr, pool_len, &tlsf) };
                 }
             }
 

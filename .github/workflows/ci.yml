@@ -49,6 +49,11 @@ jobs:
         with:
           command: test
           args: -p rlsf --features std
+      - name: cargo test --features std,unstable
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p rlsf --features std,unstable
 
       - name: cargo test --target wasm32-wasi
         uses: actions-rs/cargo@v1

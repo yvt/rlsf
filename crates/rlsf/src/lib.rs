@@ -14,6 +14,8 @@ pub use self::{
     flex::*,
     tlsf::{Tlsf, GRANULARITY},
 };
+#[cfg(feature = "unstable")]
+pub use tlsf::BlockInfo;
 
 /// Attaches `#[cfg(...)]` and `#[doc(cfg(...))]` to a given item definition
 /// to conditionally compile it only when we have a `GlobalTlsf` implementation

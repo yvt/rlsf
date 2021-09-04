@@ -2,7 +2,7 @@
 use const_default1::ConstDefault;
 use core::{
     alloc::Layout,
-    debug_assert, debug_assert_eq,
+    debug_assert, debug_assert_eq, fmt,
     hint::unreachable_unchecked,
     marker::PhantomData,
     mem::{self, MaybeUninit},
@@ -129,7 +129,7 @@ const SIZE_SENTINEL: usize = 2;
 const SIZE_SIZE_MASK: usize = !((1 << GRANULARITY_LOG2) - 1);
 
 impl BlockHdr {
-    /// Get the next block.
+    /// Get the next block, assuming it exists.
     ///
     /// # Safety
     ///
@@ -1451,6 +1451,148 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         }
 
         Some(new_ptr)
+    }
+
+    /// Enumerate memory blocks in the specified memory pool.
+    ///
+    /// # Safety
+    ///
+    /// `pool` must precisely represent a memory pool that belongs to `self`.
+    /// Specifically, its starting address must be the one that was previously
+    /// passed to [`Self::insert_free_block_ptr`], and its length must be the
+    /// sum of the return values of that call to `insert_free_block_ptr` and
+    /// all subsequent calls to [`Self::append_free_block_ptr`] that have been
+    /// made to expand this memory pool.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rlsf::Tlsf;
+    /// use std::{mem::MaybeUninit, alloc::Layout, ptr::{NonNull, slice_from_raw_parts_mut}};
+    ///
+    /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
+    /// let pool_ptr = NonNull::new(unsafe { POOL.as_mut_ptr() }).unwrap();
+    ///
+    /// let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::new();
+    ///
+    /// // Insert a memory pool. We need to remember the actual pool size
+    /// // to safely use `Tlsf::iter_blocks` later.
+    /// let pool_len = unsafe { tlsf.insert_free_block_ptr(pool_ptr) }.unwrap().get();
+    /// let pool_ptr = NonNull::new(
+    ///     slice_from_raw_parts_mut(pool_ptr.as_ptr() as *mut u8, pool_len)
+    /// ).unwrap();
+    ///
+    /// // A closure to calculate the remaining free space
+    /// let free_bytes = |p: &Tlsf<'_, _, _, 12, 16>| unsafe { p.iter_blocks(pool_ptr) }
+    ///     .filter(|block_info| !block_info.is_occupied())
+    ///     .map(|block_info| block_info.max_payload_size())
+    ///     .sum::<usize>();
+    ///
+    /// // Allocate memory
+    /// let free_bytes1 = dbg!(free_bytes(&tlsf));
+    /// tlsf.allocate(Layout::new::<u64>()).unwrap();
+    /// let free_bytes2 = dbg!(free_bytes(&tlsf));
+    ///
+    /// // Since we have allocated memory, we should have less free space now
+    /// assert!(free_bytes2 < free_bytes1);
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "unstable")))]
+    pub unsafe fn iter_blocks(
+        &self,
+        pool: NonNull<[u8]>,
+    ) -> impl Iterator<Item = BlockInfo<'_>> + Send + '_ {
+        let len = nonnull_slice_len(pool);
+
+        // Round up the starting address in the same way as
+        // `insert_free_block_ptr` does.
+        //
+        // In `insert_free_block_ptr` there's a minimum pool size cut-off, and
+        // when that happens, `insert_free_block_ptr` returns `None`. In such a
+        // case, as per this method's safety requirements, "the sum of the
+        // return values of ..." is undefined, so the user is not supposed to
+        // even call this method. This means this method don't have to repeat
+        // this cut-off step from `insert_free_block_ptr`.
+        let unaligned_start = pool.as_ptr() as *mut u8 as usize;
+        let mut start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
+        let mut len = len.saturating_sub(start.wrapping_sub(unaligned_start));
+
+        core::iter::from_fn(move || {
+            if len == 0 {
+                None
+            } else {
+                let block_hdr = &*(start as *const BlockHdr);
+                let block_size = block_hdr.size & SIZE_SIZE_MASK;
+
+                // Advance the cursor
+                len -= block_size;
+                start = start.wrapping_add(block_size);
+
+                Some(BlockInfo { block_hdr })
+            }
+        })
+        .filter(|block_info| {
+            // Exclude sentinel blocks
+            (block_info.block_hdr.size & SIZE_SENTINEL) == 0
+        })
+    }
+}
+
+/// Allows the caller of [`Tlsf::iter_blocks`] to examine the properties of a
+/// memory block in a [`Tlsf`] memory pool.
+#[derive(Clone, Copy)]
+#[cfg(feature = "unstable")]
+#[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "unstable")))]
+pub struct BlockInfo<'a> {
+    block_hdr: &'a BlockHdr,
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for BlockInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("BlockInfo")
+            .field("ptr", &self.as_ptr_range())
+            .field("size", &self.size())
+            .field("is_occupied", &self.is_occupied())
+            .finish()
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl BlockInfo<'_> {
+    /// Get this block's size, including the header.
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.block_hdr.size & SIZE_SIZE_MASK
+    }
+
+    /// Get the block's size minus the header.
+    ///
+    /// This represents the maximum size of an allocation with an alignment
+    /// smaller than [`GRANULARITY`] that can fit in this block.
+    #[inline]
+    pub fn max_payload_size(&self) -> usize {
+        self.size() - GRANULARITY / 2
+    }
+
+    /// Get this block's address range as a raw slice pointer.
+    #[inline]
+    pub fn as_ptr(&self) -> NonNull<[u8]> {
+        nonnull_slice_from_raw_parts(NonNull::from(self.block_hdr).cast(), self.size())
+    }
+
+    /// Get this block's address range as two raw pointers.
+    #[inline]
+    fn as_ptr_range(&self) -> core::ops::Range<*mut u8> {
+        let start = self.block_hdr as *const _ as *mut u8;
+        let end = start.wrapping_add(self.size());
+        start..end
+    }
+
+    /// Get a flag indicating wthether this block is in use.
+    #[inline]
+    pub fn is_occupied(&self) -> bool {
+        (self.block_hdr.size & SIZE_USED) != 0
     }
 }
 
