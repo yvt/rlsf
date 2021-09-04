@@ -133,7 +133,7 @@ mod utils;
 pub use self::{
     flex::*,
     init::*,
-    tlsf::{Tlsf, GRANULARITY},
+    tlsf::{BlockInfo, Tlsf, GRANULARITY},
 };
 
 /// Attaches `#[cfg(...)]` and `#[doc(cfg(...))]` to a given item definition
