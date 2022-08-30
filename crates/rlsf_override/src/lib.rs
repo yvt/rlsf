@@ -138,3 +138,150 @@ pub unsafe extern "C" fn free(ptr: *mut c_void) {
         CAlloc::deallocate(&ALLOC, ptr.cast());
     }
 }
+
+// TODO: Find a way to define these in a C++ source file and make sure the
+//       symbols are exported by the final cdylib file
+/// `operator delete[](void*, unsigned long, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPvmSt11align_val_t(p: *mut c_void, _: usize, _: usize) {
+    free(p);
+}
+
+/// `operator delete[](void*, std::align_val_t, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPvSt11align_val_tRKSt9nothrow_t(p: *mut c_void, _: usize, _: &c_void) {
+    free(p);
+}
+
+/// `operator delete[](void*, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPvSt11align_val_t(p: *mut c_void, _: usize) {
+    free(p);
+}
+
+/// `operator delete(void*, unsigned long, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPvmSt11align_val_t(p: *mut c_void, _: usize, _: usize) {
+    free(p);
+}
+
+/// `operator delete(void*, std::align_val_t, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPvSt11align_val_tRKSt9nothrow_t(p: *mut c_void, _: usize, _: usize) {
+    free(p);
+}
+
+/// `operator delete(void*, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPvSt11align_val_t(p: *mut c_void, _: usize) {
+    free(p);
+}
+
+/// `operator new[](unsigned long, std::align_val_t, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnamSt11align_val_tRKSt9nothrow_t(
+    size: usize,
+    align: usize,
+    _: &c_void,
+) -> *mut c_void {
+    cpp_new_impl(size, align, true)
+}
+
+/// `operator new[](unsigned long, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnamSt11align_val_t(size: usize, align: usize) -> *mut c_void {
+    cpp_new_impl(size, align, false)
+}
+
+/// `operator new(unsigned long, std::align_val_t, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnwmSt11align_val_tRKSt9nothrow_t(
+    size: usize,
+    align: usize,
+    _: &c_void,
+) -> *mut c_void {
+    cpp_new_impl(size, align, true)
+}
+
+/// `operator new(unsigned long, std::align_val_t)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnwmSt11align_val_t(size: usize, align: usize) -> *mut c_void {
+    cpp_new_impl(size, align, false)
+}
+
+/// `operator delete[](void*, unsigned long)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPvm(p: *mut c_void, _: usize) {
+    free(p);
+}
+
+/// `operator delete(void*, unsigned long)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPvm(p: *mut c_void, _: usize) {
+    free(p);
+}
+
+/// `operator delete[](void*, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPvRKSt9nothrow_t(p: *mut c_void, _: &c_void) {
+    free(p);
+}
+
+/// `operator delete(void*, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPvRKSt9nothrow_t(p: *mut c_void, _: &c_void) {
+    free(p);
+}
+
+/// `operator delete[](void*)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdaPv(p: *mut c_void) {
+    free(p);
+}
+
+/// `operator delete(void*)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZdlPv(p: *mut c_void) {
+    free(p);
+}
+
+/// `operator new[](unsigned long, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnamRKSt9nothrow_t(size: usize, _: &c_void) -> *mut c_void {
+    cpp_new_impl(size, 0, true)
+}
+
+/// `operator new(unsigned long, std::nothrow_t const&)`
+#[no_mangle]
+pub unsafe extern "C" fn _ZnwmRKSt9nothrow_t(size: usize, _: &c_void) -> *mut c_void {
+    cpp_new_impl(size, 0, true)
+}
+
+/// `operator new[](unsigned long)`
+#[no_mangle]
+pub unsafe extern "C" fn _Znam(size: usize) -> *mut c_void {
+    cpp_new_impl(size, 0, false)
+}
+
+/// `operator new(unsigned long)`
+#[no_mangle]
+pub unsafe extern "C" fn _Znwm(size: usize) -> *mut c_void {
+    cpp_new_impl(size, 0, false)
+}
+
+#[inline]
+fn cpp_new_impl(size: usize, align: usize, is_noexcept: bool) -> *mut c_void {
+    let ptr = unsafe {
+        if align == 0 {
+            malloc(size)
+        } else {
+            aligned_alloc(align, size)
+        }
+    };
+    if !is_noexcept && ptr.is_null() {
+        // TODO: Throw an actual C++ exception through `extern "C-unwind"`
+        // (rust-lang/rust#74990)
+        panic!("allocation of size {} and alignment {} failed", size, align);
+    }
+    ptr
+}
