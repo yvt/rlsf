@@ -53,7 +53,7 @@ dlmalloc: 9613 bytes.
 measurement. The exception is `wee_alloc`, for which a fork based on commit
 f26c431df6f was used to make it compile on the latest nightly compiler. -->
 
-## Limitations
+## Drawbacks
 
  - **It does not support concurrent access.** A whole pool must be locked
    for allocation and deallocation. If you use a FIFO lock to protect the
@@ -63,7 +63,8 @@ f26c431df6f was used to make it compile on the latest nightly compiler. -->
    concurrent environment is desired.
 
  - **Free blocks cannot be returned to the underlying memory system
-   efficiently.**
+   efficiently.** Note that they are still reclaimed for future allocations
+   by the same allocator, and no space is actually lost.
 
 ## Examples
 
