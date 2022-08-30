@@ -22,7 +22,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-20.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -50,12 +50,6 @@ jobs:
           command: test
           args: -p rlsf --features std
 
-      - name: Override the test enviroment's memory allocator
-        run: |
-          cargo build -p rlsf_override --release
-          stat "`pwd`/target/release/librlsf_override.so"
-          echo "LD_PRELOAD=`pwd`/target/release/librlsf_override.so" >> $GITHUB_ENV
-
       - name: cargo test --target wasm32-wasi
         uses: actions-rs/cargo@v1
         with:
@@ -66,3 +60,20 @@ jobs:
         with:
           command: test
           args: --target wasm32-wasi -p rlsf --features std
+
+      - name: Override the test enviroment's memory allocator
+        run: |
+          cargo build -p rlsf_override --release
+          stat "`pwd`/target/release/librlsf_override.so"
+          echo "LD_PRELOAD=`pwd`/target/release/librlsf_override.so" >> $GITHUB_ENV
+        
+          # Old Rust toolchains crash when using librlsf_override
+          echo '[toolchain]' > rust-toolchain
+          echo 'channel = "1.61.0"' >> rust-toolchain
+          echo 'targets = ["wasm32-wasi"]' >> rust-toolchain
+
+      - name: cargo test --target wasm32-wasi (with rlsf_override)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --target wasm32-wasi -p rlsf nonexistent
