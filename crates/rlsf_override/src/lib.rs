@@ -13,6 +13,7 @@ pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::INIT;
 #[used]
 static _F: (
     unsafe extern "C" fn(usize) -> *mut c_void,
+    unsafe extern "C" fn(*mut c_void) -> usize,
     unsafe extern "C" fn(usize) -> *mut c_void,
     unsafe extern "C" fn(usize) -> *mut c_void,
     unsafe extern "C" fn(usize, usize) -> *mut c_void,
@@ -23,6 +24,7 @@ static _F: (
     unsafe extern "C" fn(*mut c_void),
 ) = (
     malloc,
+    malloc_usable_size,
     valloc,
     pvalloc,
     calloc,
@@ -62,6 +64,15 @@ const MIN_ALIGN: usize = match () {
 #[no_mangle]
 pub unsafe extern "C" fn malloc(size: usize) -> *mut c_void {
     aligned_alloc(MIN_ALIGN, size)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn malloc_usable_size(p: *mut c_void) -> usize {
+    if let Some(p) = NonNull::new(p) {
+        CAlloc::allocation_usable_size(&ALLOC, p.cast())
+    } else {
+        0
+    }
 }
 
 #[inline]
