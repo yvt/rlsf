@@ -9,32 +9,6 @@ use std::{
 #[global_allocator]
 pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::INIT;
 
-// Preserve the symbols
-#[used]
-static _F: (
-    unsafe extern "C" fn(usize) -> *mut c_void,
-    unsafe extern "C" fn(*mut c_void) -> usize,
-    unsafe extern "C" fn(usize) -> *mut c_void,
-    unsafe extern "C" fn(usize) -> *mut c_void,
-    unsafe extern "C" fn(usize, usize) -> *mut c_void,
-    unsafe extern "C" fn(*mut *mut c_void, usize, usize) -> c_int,
-    unsafe extern "C" fn(usize, usize) -> *mut c_void,
-    unsafe extern "C" fn(usize, usize) -> *mut c_void,
-    unsafe extern "C" fn(*mut c_void, usize) -> *mut c_void,
-    unsafe extern "C" fn(*mut c_void),
-) = (
-    malloc,
-    malloc_usable_size,
-    valloc,
-    pvalloc,
-    calloc,
-    posix_memalign,
-    aligned_alloc,
-    memalign,
-    realloc,
-    free,
-);
-
 /// The alignment guaranteed by `malloc`.
 const MIN_ALIGN: usize = match () {
     #[cfg(all(any(
