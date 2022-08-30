@@ -38,7 +38,7 @@ pp. 79-88, doi: 10.1109/EMRTS.2004.1311009.</sub>
 ![The result of latency measurement on STM32F401 is shown here. rlsf:
 260–320 cycles. buddy-alloc: 340–440 cycles. umm_malloc: 300–700 cycles.
 dlmalloc: 450–750 cycles.
-](https://ipfs.io/ipfs/QmaQExwdRAT4Z2LRsyJYft1QCMCroEZBJRzpLRMu5eNrLu/time-cm4f-xf-3.svg)
+](https://yvt.jp/files/programs/rlsf/time-cm4f-xf-3.svg)
 
 <!-- `wee_alloc` could not be measured because it ran out of memory too
 early, probably because of <https://github.com/rustwasm/wee_alloc/issues/85>
@@ -47,7 +47,7 @@ early, probably because of <https://github.com/rustwasm/wee_alloc/issues/85>
 ![The result of code size measurement on WebAssembly is shown here. rlsf:
 1267 bytes, rlsf + pool coalescing: 1584 bytes, wee_alloc: 1910 bytes,
 dlmalloc: 9613 bytes.
-](https://ipfs.io/ipfs/QmREbCr4pXZuMxtFoKU1qXkvqbuLemiydZs8iMAGuVDtAk/size-wasm-xf.svg)
+](https://yvt.jp/files/programs/rlsf/size-wasm-xf.svg)
 
 <!-- The latest version at the point of writing was used for each library's
 measurement. The exception is `wee_alloc`, for which a fork based on commit
