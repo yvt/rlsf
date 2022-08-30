@@ -66,6 +66,10 @@ f26c431df6f was used to make it compile on the latest nightly compiler. -->
    efficiently.** Note that they are still reclaimed for future allocations
    by the same allocator, and no space is actually lost.
 
+ - **Segregated freelists with constant-time lookup are prone to internal
+   fragmentation.** The `SLLEN` paramter allows for weighing the trade-off
+   between fewer freelists and lower fragmentation.
+
 ## Examples
 
 ### `Tlsf`: Core API
@@ -77,7 +81,7 @@ use std::{mem::MaybeUninit, alloc::Layout};
 let mut pool = [MaybeUninit::uninit(); 65536];
 
 // On 32-bit systems, the maximum block size is 16 << FLLEN = 65536 bytes.
-// The worst-case fragmentation is (16 << FLLEN) / SLLEN - 2 = 4094 bytes.
+// The worst-case internal fragmentation is (16 << FLLEN) / SLLEN - 2 = 4094 bytes.
 // `'pool` represents the memory pool's lifetime (`pool` in this case).
 let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
 //                 ^^            ^^  ^^
