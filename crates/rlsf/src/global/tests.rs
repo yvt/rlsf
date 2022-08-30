@@ -53,6 +53,8 @@ macro_rules! gen_test {
                             log::trace!(" → {:?}", ptr);
 
                             if let Some(ptr) = ptr {
+                                assert!(unsafe { CAlloc::allocation_usable_size(tlsf, ptr) } >= len);
+
                                 allocs.push(Alloc { ptr, layout });
                                 sa.allocate(layout, ptr);
                             }

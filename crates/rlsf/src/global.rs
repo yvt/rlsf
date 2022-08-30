@@ -220,6 +220,15 @@ pub unsafe trait CAlloc {
     ///
     unsafe fn reallocate(&self, ptr: NonNull<u8>, new_layout: alloc::Layout)
         -> Option<NonNull<u8>>;
+
+    /// Get the actual usable size of a previously allocated memory block.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated by calling
+    ///    [`Self::allocate`] on `self`.
+    ///
+    unsafe fn allocation_usable_size(&self, ptr: NonNull<u8>) -> usize;
 }
 
 unsafe impl<Options: GlobalTlsfOptions> CAlloc for GlobalTlsf<Options> {
@@ -257,6 +266,11 @@ unsafe impl<Options: GlobalTlsfOptions> CAlloc for GlobalTlsf<Options> {
         } else {
             None
         }
+    }
+
+    unsafe fn allocation_usable_size(&self, ptr: NonNull<u8>) -> usize {
+        // Safety: `ptr` denotes a previous allocation
+        TheTlsf::<Options>::size_of_allocation_unknown_align(ptr)
     }
 }
 
