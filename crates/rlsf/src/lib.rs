@@ -2,6 +2,10 @@
 #![no_std]
 #![cfg_attr(feature = "doc_cfg", feature(doc_cfg))]
 
+#[cfg(doc)]
+#[doc = include_str!("../CHANGELOG.md")]
+pub mod _changelog_ {}
+
 mod flex;
 pub mod int;
 mod tlsf;
