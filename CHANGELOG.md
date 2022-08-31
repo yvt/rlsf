@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **Breaking:** Raised the minimum supported Rust version to 1.61
 - Documentation improvements
 - Descriptive compile-time panic messages
-- **Breaking:** Raised the minimum supported Rust version to 1.61
 
 ### Added
 
-- `CAlloc::allocation_usable_size`
+- **Breaking:** `CAlloc::allocation_usable_size`
 - `{Global,}Tlsf::new`
 - `FlexTlsf::new` as a `const fn`
 - `ConstDefault` implementation for `Tlsf`
