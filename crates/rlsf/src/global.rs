@@ -47,7 +47,7 @@ type TheTlsf<Options> =
     FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
 impl<Options: GlobalTlsfOptions> ConstDefault for GlobalTlsf<Options> {
-    #[allow(clippy::clippy::declare_interior_mutable_const)]
+    #[allow(clippy::declare_interior_mutable_const)]
     const DEFAULT: Self = Self::new();
 }
 
