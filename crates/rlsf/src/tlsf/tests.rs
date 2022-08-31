@@ -335,7 +335,7 @@ macro_rules! gen_test {
 
             #[quickcheck]
             fn map_ceil_and_unmap(size: usize, shift: u32) -> quickcheck::TestResult {
-                let size = size.rotate_left(shift % super::USIZE_BITS)
+                let size = size.rotate_left(shift % usize::BITS)
                     .wrapping_mul(super::GRANULARITY);
                 if size == 0 {
                     return quickcheck::TestResult::discard();
@@ -363,7 +363,7 @@ macro_rules! gen_test {
                     if let Some((fl, _sl)) = TheTlsf::map_ceil(size) {
                         // The lower bound of `(fl, sl)` is not representable
                         // in `usize` - this should be why
-                        assert!(fl as u32 + super::GRANULARITY_LOG2 >= super::USIZE_BITS);
+                        assert!(fl as u32 + super::GRANULARITY_LOG2 >= usize::BITS);
                     } else {
                         // `map_ceil_and_unmap` is `map_ceil` + infallible
                         // reverse mapping, and the suboperation `map_ceil`
@@ -377,7 +377,7 @@ macro_rules! gen_test {
             #[quickcheck]
             fn map_ceil_and_unmap_huge(shift: u32) -> quickcheck::TestResult {
                 let size = usize::MAX <<
-                    (shift % (super::USIZE_BITS - super::GRANULARITY_LOG2)
+                    (shift % (usize::BITS - super::GRANULARITY_LOG2)
                         + super::GRANULARITY_LOG2);
 
                 if size == 0 || TheTlsf::map_ceil(size).is_some() {

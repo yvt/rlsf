@@ -7,7 +7,7 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use super::{tlsf::USIZE_BITS, FlexTlsf};
+use super::FlexTlsf;
 
 // `doc(cfg(...))` needs to be attached to the type for it to be displayed
 // on the docs.
@@ -44,7 +44,7 @@ cfg_if::cfg_if! {
 type TheTlsf<Options> = Options;
 #[cfg(not(doc))]
 type TheTlsf<Options> =
-    FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
+    FlexTlsf<os::Source<Options>, usize, usize, { usize::BITS as usize }, { usize::BITS as usize }>;
 
 impl<Options: GlobalTlsfOptions> ConstDefault for GlobalTlsf<Options> {
     #[allow(clippy::declare_interior_mutable_const)]

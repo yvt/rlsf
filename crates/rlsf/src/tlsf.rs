@@ -94,9 +94,6 @@ pub const GRANULARITY: usize = core::mem::size_of::<usize>() * 4;
 
 const GRANULARITY_LOG2: u32 = GRANULARITY.trailing_zeros();
 
-// FIXME: Use `usize::BITS` when it's stable
-pub(crate) const USIZE_BITS: u32 = core::mem::size_of::<usize>() as u32 * 8;
-
 /// The header of a memory block.
 // The header is actually aligned at `size_of::<usize>() * 4`-byte boundaries
 // but the alignment is set to a half value here not to introduce a padding at
@@ -249,7 +246,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// free memory block.
     const MAX_POOL_SIZE: Option<usize> = {
         let shift = GRANULARITY_LOG2 + FLLEN as u32;
-        if shift < USIZE_BITS {
+        if shift < usize::BITS {
             Some(1 << shift)
         } else {
             None
@@ -268,7 +265,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     fn map_floor(size: usize) -> Option<(usize, usize)> {
         debug_assert!(size >= GRANULARITY);
         debug_assert!(size % GRANULARITY == 0);
-        let fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
+        let fl = usize::BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
 
         // The shift amount can be negative, and rotation lets us handle both
         // cases without branching. Underflowed digits can be simply masked out
@@ -292,7 +289,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     fn map_ceil(size: usize) -> Option<(usize, usize)> {
         debug_assert!(size >= GRANULARITY);
         debug_assert!(size % GRANULARITY == 0);
-        let mut fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
+        let mut fl = usize::BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
 
         // The shift amount can be negative, and rotation lets us handle both
         // cases without branching.
@@ -317,13 +314,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     }
 
     const MAX_MAP_CEIL_AND_UNMAP_INPUT: usize = {
-        // The maximum value for which `map_ceil(x)` returns `(USIZE_BITS -
+        // The maximum value for which `map_ceil(x)` returns `(usize::BITS -
         // GRANULARITY_LOG2 - 1, _)`, assuming `FLLEN == ∞`
         let max1 = !(usize::MAX >> (Self::SLI + 1));
 
         // Now take into account the fact that `FLLEN` is not actually infinity
-        if FLLEN as u32 - 1 < USIZE_BITS - GRANULARITY_LOG2 - 1 {
-            max1 >> ((USIZE_BITS - GRANULARITY_LOG2 - 1) - (FLLEN as u32 - 1))
+        if FLLEN as u32 - 1 < usize::BITS - GRANULARITY_LOG2 - 1 {
+            max1 >> ((usize::BITS - GRANULARITY_LOG2 - 1) - (FLLEN as u32 - 1))
         } else {
             max1
         }
@@ -342,7 +339,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             return None;
         }
 
-        let fl = USIZE_BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
+        let fl = usize::BITS - GRANULARITY_LOG2 - 1 - size.leading_zeros();
 
         let list_min_size = if GRANULARITY_LOG2 < Self::SLI && fl < Self::SLI - GRANULARITY_LOG2 {
             size
