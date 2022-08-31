@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - `CAlloc::allocation_usable_size`
 - `{Global,}Tlsf::new`
+- `FlexTlsf::new` as a `const fn`
 
 ### Removed
 

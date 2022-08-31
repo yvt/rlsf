@@ -245,11 +245,7 @@ impl<
 {
     #[inline]
     fn default() -> Self {
-        Self {
-            source: Source::default(),
-            tlsf: Tlsf::default(),
-            growable_pool: None,
-        }
+        Self::new(Source::default())
     }
 }
 
@@ -262,13 +258,8 @@ impl<
         const SLLEN: usize,
     > Init for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
 {
-    // FIXME: Add `const fn new()` when `const fn`s with type bounds are stabilized
     /// An empty pool.
-    const INIT: Self = Self {
-        source: Source::INIT,
-        tlsf: Tlsf::new(),
-        growable_pool: None,
-    };
+    const INIT: Self = Self::new(Source::INIT);
 }
 
 impl<
@@ -281,7 +272,7 @@ impl<
 {
     /// Construct a new `FlexTlsf` object.
     #[inline]
-    pub fn new(source: Source) -> Self {
+    pub const fn new(source: Source) -> Self {
         Self {
             source,
             tlsf: Tlsf::new(),
