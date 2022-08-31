@@ -69,7 +69,7 @@ pub struct Tlsf<'pool, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usiz
     /// `sl_bitmap[fl].get_bit(sl)` is set iff `first_free[fl][sl].is_some()`
     sl_bitmap: [SLBitmap; FLLEN],
     first_free: [[Option<NonNull<FreeBlockHdr>>; SLLEN]; FLLEN],
-    _phantom: PhantomData<&'pool mut ()>,
+    _phantom: PhantomData<&'pool ()>,
 }
 
 // Safety: All memory block headers directly or indirectly referenced by a
@@ -194,24 +194,26 @@ impl<FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN
     for Tlsf<'_, FLBitmap, SLBitmap, FLLEN, SLLEN>
 {
     fn default() -> Self {
-        Self::INIT
+        Self::new()
     }
 }
 
 impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize>
     Tlsf<'pool, FLBitmap, SLBitmap, FLLEN, SLLEN>
 {
-    // FIXME: Add `const fn new()` when `const fn`s with type bounds are stabilized
-    /// An empty pool.
-    pub const INIT: Self = Self {
-        fl_bitmap: FLBitmap::ZERO,
-        sl_bitmap: [SLBitmap::ZERO; FLLEN],
-        first_free: [[None; SLLEN]; FLLEN],
-        _phantom: {
-            let () = Self::VALID;
-            PhantomData
-        },
-    };
+    /// Construct an empty pool.
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            fl_bitmap: FLBitmap::ZERO,
+            sl_bitmap: [SLBitmap::ZERO; FLLEN],
+            first_free: [[None; SLLEN]; FLLEN],
+            _phantom: {
+                let () = Self::VALID;
+                PhantomData
+            },
+        }
+    }
 
     // For testing
     #[allow(dead_code)]
@@ -437,7 +439,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// use rlsf::Tlsf;
     /// use std::{mem::MaybeUninit, ptr::NonNull};
     /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// unsafe {
     ///     tlsf.insert_free_block_ptr(NonNull::new(POOL.as_mut_ptr()).unwrap());
     /// }
@@ -563,7 +565,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// let mut cursor = unsafe { POOL.as_mut_ptr() } as *mut u8;
     /// let mut remaining_len = 1024;
     ///
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// let pool0_len = unsafe {
     ///     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
     ///         NonNull::new(cursor).unwrap(), remaining_len / 2))
@@ -703,7 +705,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// use rlsf::Tlsf;
     /// use std::mem::MaybeUninit;
     /// let mut pool = [MaybeUninit::uninit(); 1024];
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// tlsf.insert_free_block(&mut pool);
     /// ```
     ///
@@ -712,7 +714,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// ```rust,compile_fail
     /// use rlsf::Tlsf;
     /// use std::mem::MaybeUninit;
-    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::INIT;
+    /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// let mut pool = [MaybeUninit::uninit(); 1024];
     /// tlsf.insert_free_block(&mut pool);
     /// drop(pool); // dropping the memory block first is not allowed

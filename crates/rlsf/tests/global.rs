@@ -7,7 +7,7 @@ use std::{
 
 #[global_allocator]
 #[cfg(any(all(target_arch = "wasm32", not(target_feature = "atomics")), unix))]
-static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::INIT;
+static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::new();
 
 #[test]
 fn foo() {

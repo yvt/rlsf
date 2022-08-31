@@ -47,7 +47,7 @@ type TheTlsf<Options> =
 
 impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
     #[allow(clippy::clippy::declare_interior_mutable_const)]
-    const INIT: Self = Self::INIT;
+    const INIT: Self = Self::new();
 }
 
 if_supported_target! {
@@ -94,13 +94,15 @@ unsafe impl<Options: GlobalTlsfOptions> Send for GlobalTlsf<Options> {}
 unsafe impl<Options: GlobalTlsfOptions> Sync for GlobalTlsf<Options> {}
 
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
-    /// The initializer.
-    #[allow(clippy::clippy::declare_interior_mutable_const)]
-    pub const INIT: Self = Self {
-        inner: UnsafeCell::new(Init::INIT),
-        mutex: Init::INIT,
-        _phantom: PhantomData,
-    };
+    /// Construct an empty instance of `Self`.
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            inner: UnsafeCell::new(Init::INIT),
+            mutex: Init::INIT,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {

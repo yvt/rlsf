@@ -85,7 +85,7 @@ let mut pool = [MaybeUninit::uninit(); 65536];
 // On 32-bit systems, the maximum block size is 16 << FLLEN = 65536 bytes.
 // The worst-case internal fragmentation is (16 << FLLEN) / SLLEN - 2 = 4094 bytes.
 // `'pool` represents the memory pool's lifetime (`pool` in this case).
-let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::INIT;
+let mut tlsf: Tlsf<'_, u16, u16, 12, 16> = Tlsf::new();
 //                 ^^            ^^  ^^
 //                  |             |  |
 //                'pool           |  SLLEN
@@ -113,7 +113,7 @@ the system supports it.
 ```rust
 #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
 #[global_allocator]
-static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::INIT;
+static A: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::new();
 
 let mut m = std::collections::HashMap::new();
 m.insert(1, 2);

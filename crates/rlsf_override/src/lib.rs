@@ -7,7 +7,7 @@ use std::{
 };
 
 #[global_allocator]
-pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::INIT;
+pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::new();
 
 /// The alignment guaranteed by `malloc`.
 const MIN_ALIGN: usize = match () {

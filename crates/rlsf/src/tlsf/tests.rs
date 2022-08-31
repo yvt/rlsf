@@ -17,7 +17,7 @@ macro_rules! gen_test {
             fn minimal() {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = [MaybeUninit::uninit(); 65536];
                 tlsf.insert_free_block(&mut pool);
@@ -35,7 +35,7 @@ macro_rules! gen_test {
             fn adaa() {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = [MaybeUninit::uninit(); 65536];
                 tlsf.insert_free_block(&mut pool);
@@ -59,7 +59,7 @@ macro_rules! gen_test {
             fn aadd() {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = Align([MaybeUninit::uninit(); 96]);
                 tlsf.insert_free_block(&mut pool.0);
@@ -82,7 +82,7 @@ macro_rules! gen_test {
             fn ara() {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = Align([MaybeUninit::uninit(); 96]);
                 tlsf.insert_free_block(&mut pool.0);
@@ -105,7 +105,7 @@ macro_rules! gen_test {
             fn append_free_block_ptr() {
                 let _ = env_logger::builder().is_test(true).try_init();
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = Align([MaybeUninit::uninit(); 512]);
                 let mut cursor = pool.0[0].as_mut_ptr() as *mut u8;
@@ -142,7 +142,7 @@ macro_rules! gen_test {
 
             #[test]
             fn insert_free_block_ptr_near_end_fail() {
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
                 unsafe {
                     // FIXME: Use `NonNull::<[T]>::slice_from_raw_parts` when it's stable
                     tlsf.insert_free_block_ptr(
@@ -159,7 +159,7 @@ macro_rules! gen_test {
 
             #[test]
             fn insert_free_block_ptr_near_end() {
-                let _tlsf: TheTlsf = Tlsf::INIT;
+                let _tlsf: TheTlsf = Tlsf::new();
                 // TODO: Find a way to test this case
                 //
                 // unsafe {
@@ -177,7 +177,7 @@ macro_rules! gen_test {
 
             fn random_inner(pool_start: usize, pool_size: usize, bytecode: Vec<u8>) -> Option<()> {
                 let mut sa = ShadowAllocator::new();
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
 
                 let mut pool = Align([MaybeUninit::<u8>::uninit(); 65536]);
                 let pool_ptr;
@@ -424,7 +424,7 @@ macro_rules! gen_test {
                     )
                 };
 
-                let mut tlsf: TheTlsf = Tlsf::INIT;
+                let mut tlsf: TheTlsf = Tlsf::new();
                 tlsf.insert_free_block(pool);
 
                 // The allocation should success because

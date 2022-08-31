@@ -14,7 +14,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
-- **Added:** `CAlloc::allocation_usable_size`
+- `CAlloc::allocation_usable_size`
+- `{Global,}Tlsf::new`
+
+### Removed
+
+- **Breaking:** `{Global,}Tlsf::INIT`
 
 ## [0.1.2] - 2021-05-30
 

@@ -247,7 +247,7 @@ impl<
     fn default() -> Self {
         Self {
             source: Source::default(),
-            tlsf: Tlsf::INIT,
+            tlsf: Tlsf::default(),
             growable_pool: None,
         }
     }
@@ -266,7 +266,7 @@ impl<
     /// An empty pool.
     const INIT: Self = Self {
         source: Source::INIT,
-        tlsf: Tlsf::INIT,
+        tlsf: Tlsf::new(),
         growable_pool: None,
     };
 }
@@ -284,7 +284,7 @@ impl<
     pub fn new(source: Source) -> Self {
         Self {
             source,
-            tlsf: Tlsf::INIT,
+            tlsf: Tlsf::new(),
             growable_pool: None,
         }
     }
