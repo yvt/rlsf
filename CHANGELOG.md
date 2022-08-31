@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `FlexTlsf::new` as a `const fn`
 - `ConstDefault` implementation for `Tlsf`
 - `Tlsf::iter_blocks` (unstable), which lets you iterate through memory blocks for diagnostic purposes.
+- `{Flex,}Tlsf::allocation_usable_size` (unstable)
 
 ### Removed
 

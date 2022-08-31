@@ -1144,6 +1144,22 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         block_end - payload_start
     }
 
+    /// Get the actual usable size of a previously allocated memory block.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated via some
+    ///    instance of `Self`.
+    ///  - The call must happen-before the deallocation or reallocation of the
+    ///    memory block.
+    ///
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "unstable")))]
+    // TODO: The name could use bike-shedding
+    pub unsafe fn allocation_usable_size(ptr: NonNull<u8>) -> usize {
+        Self::size_of_allocation_unknown_align(ptr)
+    }
+
     // TODO: `reallocate_no_move` (constant-time reallocation)
 
     /// Shrink or grow a previously allocated memory block.

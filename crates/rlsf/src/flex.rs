@@ -538,6 +538,21 @@ impl<
         self.tlsf.deallocate_unknown_align(ptr)
     }
 
+    /// Get the actual usable size of a previously allocated memory block.
+    ///
+    /// # Safety
+    ///
+    ///  - `ptr` must denote a memory block previously allocated via some
+    ///    instance of `Self`.
+    ///  - The call must happen-before the deallocation or reallocation of the
+    ///    memory block.
+    ///
+    #[cfg(feature = "unstable")]
+    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "unstable")))]
+    pub unsafe fn allocation_usable_size(ptr: NonNull<u8>) -> usize {
+        Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::size_of_allocation_unknown_align(ptr)
+    }
+
     /// Shrink or grow a previously allocated memory block.
     ///
     /// Returns the new starting address of the memory block on success;
