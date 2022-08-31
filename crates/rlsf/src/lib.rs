@@ -58,9 +58,15 @@
 //!    efficiently.** Note that they are still reclaimed for future allocations
 //!    by the same allocator, and no space is actually lost.
 //!
-//!  - **Segregated freelists with constant-time lookup are prone to internal
-//!    fragmentation.** The `SLLEN` paramter allows for weighing the trade-off
-//!    between fewer freelists and lower fragmentation.
+//!  - **Segregated freelists with constant-time lookup cause internal
+//!    fragmentation proportional to free block sizes.** The `SLLEN` paramter
+//!    allows for adjusting the trade-off between fewer freelists and lower
+//!    fragmentation.
+//!
+//!  - **No special handling for small allocations (one algorithm for all
+//!    sizes).** This may lead to inefficiencies in allocation-heavy
+//!    applications compared to modern scalable memory allocators, such as
+//!    glibc and jemalloc.
 //!
 //! # Examples
 //!
