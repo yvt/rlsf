@@ -1,12 +1,12 @@
-use crate::Init;
+use const_default1::ConstDefault;
 use core::{arch::wasm32, marker::PhantomData, ptr::NonNull};
 
 use super::GlobalTlsfOptions;
 
 pub struct Mutex(());
 
-impl Init for Mutex {
-    const INIT: Self = Self(());
+impl ConstDefault for Mutex {
+    const DEFAULT: Self = Self(());
 }
 
 #[cfg(not(target_feature = "atomics"))]
@@ -21,8 +21,8 @@ impl Mutex {
 
 pub struct Source<Options>(PhantomData<fn() -> Options>);
 
-impl<Options> Init for Source<Options> {
-    const INIT: Self = Self(PhantomData);
+impl<Options> ConstDefault for Source<Options> {
+    const DEFAULT: Self = Self(PhantomData);
 }
 
 const MEM: u32 = 0;

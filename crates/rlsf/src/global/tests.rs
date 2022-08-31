@@ -18,7 +18,7 @@ macro_rules! gen_test {
 
             #[quickcheck]
             fn calloc_random(bytecode: Vec<u8>) {
-                let tlsf: TheTlsf = TheTlsf::INIT;
+                let tlsf: TheTlsf = TheTlsf::DEFAULT;
 
                 let mut allocs = Vec::new();
                 calloc_random_inner(&tlsf, &mut allocs, bytecode);

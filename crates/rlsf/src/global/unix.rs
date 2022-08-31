@@ -1,4 +1,4 @@
-use crate::Init;
+use const_default1::ConstDefault;
 use core::{
     marker::PhantomData,
     ptr::{null_mut, NonNull},
@@ -14,8 +14,8 @@ const ALLOC_UNIT: usize = 1 << 16;
 
 pub struct Mutex(());
 
-impl Init for Mutex {
-    const INIT: Self = Self(());
+impl ConstDefault for Mutex {
+    const DEFAULT: Self = Self(());
 }
 
 /// `pthread_mutex_t` might be unsafe to move, so we can't put it in `Mutex`.
@@ -35,8 +35,8 @@ impl Mutex {
 
 pub struct Source<Options>(PhantomData<fn() -> Options>);
 
-impl<Options> Init for Source<Options> {
-    const INIT: Self = Self(PhantomData);
+impl<Options> ConstDefault for Source<Options> {
+    const DEFAULT: Self = Self(PhantomData);
 }
 
 /// The memory page size minus 1. Set by `Mutex::lock`.

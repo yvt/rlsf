@@ -17,6 +17,7 @@ std = []
 [dependencies]
 svgbobdoc = { version = "0.2.2" }
 cfg-if = "1.0.0"
+const_default1 = { version = "1", package = "const-default" }
 
 [target."cfg(unix)".dependencies]
 libc = "0.2.56"

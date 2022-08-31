@@ -1,3 +1,4 @@
+use const_default1::ConstDefault;
 use core::{
     alloc,
     cell::UnsafeCell,
@@ -6,7 +7,7 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use super::{tlsf::USIZE_BITS, FlexTlsf, Init};
+use super::{tlsf::USIZE_BITS, FlexTlsf};
 
 // `doc(cfg(...))` needs to be attached to the type for it to be displayed
 // on the docs.
@@ -45,9 +46,9 @@ type TheTlsf<Options> = Options;
 type TheTlsf<Options> =
     FlexTlsf<os::Source<Options>, usize, usize, { USIZE_BITS as usize }, { USIZE_BITS as usize }>;
 
-impl<Options: GlobalTlsfOptions> Init for GlobalTlsf<Options> {
+impl<Options: GlobalTlsfOptions> ConstDefault for GlobalTlsf<Options> {
     #[allow(clippy::clippy::declare_interior_mutable_const)]
-    const INIT: Self = Self::new();
+    const DEFAULT: Self = Self::new();
 }
 
 if_supported_target! {
@@ -98,8 +99,8 @@ impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            inner: UnsafeCell::new(Init::INIT),
-            mutex: Init::INIT,
+            inner: UnsafeCell::new(ConstDefault::DEFAULT),
+            mutex: ConstDefault::DEFAULT,
             _phantom: PhantomData,
         }
     }

@@ -14,13 +14,11 @@ macro_rules! const_panic {
 }
 
 mod flex;
-mod init;
 pub mod int;
 mod tlsf;
 mod utils;
 pub use self::{
     flex::*,
-    init::*,
     tlsf::{Tlsf, GRANULARITY},
 };
 

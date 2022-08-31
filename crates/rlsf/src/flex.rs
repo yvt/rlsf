@@ -1,4 +1,5 @@
 //! An allocator with flexible backing stores
+use const_default1::ConstDefault;
 use core::{alloc::Layout, debug_assert, ptr::NonNull, unimplemented};
 
 use super::{
@@ -6,7 +7,7 @@ use super::{
     utils::{
         nonnull_slice_end, nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start,
     },
-    Init, Tlsf, GRANULARITY,
+    Tlsf, GRANULARITY,
 };
 
 /// The trait for dynamic storage allocators that can back [`FlexTlsf`].
@@ -138,8 +139,8 @@ impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> GlobalAllocAsFlexSource<T,
     };
 }
 
-impl<T: Init, const ALIGN: usize> Init for GlobalAllocAsFlexSource<T, ALIGN> {
-    const INIT: Self = Self(Init::INIT);
+impl<T: ConstDefault, const ALIGN: usize> ConstDefault for GlobalAllocAsFlexSource<T, ALIGN> {
+    const DEFAULT: Self = Self(ConstDefault::DEFAULT);
 }
 
 unsafe impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> FlexSource
@@ -249,17 +250,17 @@ impl<
     }
 }
 
-/// Initialization with a [`FlexSource`] provided by [`Init::INIT`]
+/// Initialization with a [`FlexSource`] provided by [`ConstDefault::DEFAULT`]
 impl<
-        Source: FlexSource + Init,
+        Source: FlexSource + ConstDefault,
         FLBitmap: BinInteger,
         SLBitmap: BinInteger,
         const FLLEN: usize,
         const SLLEN: usize,
-    > Init for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
+    > ConstDefault for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
 {
     /// An empty pool.
-    const INIT: Self = Self::new(Source::INIT);
+    const DEFAULT: Self = Self::new(Source::DEFAULT);
 }
 
 impl<
