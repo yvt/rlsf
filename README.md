@@ -15,10 +15,12 @@ allocation algorithm¹. Requires Rust 1.51.0 or later.
  - **Fast and small.** You can have both. It was found to be smaller and
    faster² than most `no_std`-compatible allocator crates.
 
- - **The memory pool is provided by an application.** Examples of potential
-   memory pool sources include: a `static` array for global memory
-   allocation, a memory block allocated by another memory allocator for
-   arena allocation.
+ - **Accepts any kinds of memory pools.** The low-level type
+   [`Tlsf`](#tlsf-core-api) just divides any memory pools you provide
+   (e.g., a `static` array) to serve allocation requests.
+   The high-level type [`GlobalTlsf`](#globaltlsf-global-allocator)
+   automatically acquires memory pages using standard methods on supported
+   systems.
 
  - **This crate supports `#![no_std]`.** It can be used in bare-metal and
    RTOS-based applications.
@@ -61,10 +63,6 @@ f26c431df6f was used to make it compile on the latest nightly compiler. -->
    You should consider using a thread-caching memory allocator (e.g.,
    TCMalloc, jemalloc) if achieving a maximal throughput in a highly
    concurrent environment is desired.
-
- - **Free blocks cannot be returned to the underlying memory system
-   efficiently.** Note that they are still reclaimed for future allocations
-   by the same allocator, and no space is actually lost.
 
  - **Segregated freelists with constant-time lookup cause internal
    fragmentation proportional to free block sizes.** The `SLLEN` paramter
@@ -109,6 +107,10 @@ unsafe {
 ```
 
 ### `GlobalTlsf`: Global Allocator
+
+`GlobalTlsf` automatically acquires memory pages through platform-specific
+mechanisms. It doesn't support returning memory pages to the system even if
+the system supports it.
 
 ```rust
 #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
