@@ -1,4 +1,5 @@
 //! The TLSF allocator core
+use const_default1::ConstDefault;
 use core::{
     alloc::Layout,
     debug_assert, debug_assert_eq,
@@ -196,6 +197,12 @@ impl<FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN
     fn default() -> Self {
         Self::new()
     }
+}
+
+impl<FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize>
+    ConstDefault for Tlsf<'_, FLBitmap, SLBitmap, FLLEN, SLLEN>
+{
+    const DEFAULT: Self = Self::new();
 }
 
 impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, const SLLEN: usize>
