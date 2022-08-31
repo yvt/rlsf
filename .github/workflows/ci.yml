@@ -66,11 +66,6 @@ jobs:
           cargo build -p rlsf_override --release
           stat "`pwd`/target/release/librlsf_override.so"
           echo "LD_PRELOAD=`pwd`/target/release/librlsf_override.so" >> $GITHUB_ENV
-        
-          # Old Rust toolchains crash when using librlsf_override
-          echo '[toolchain]' > rust-toolchain
-          echo 'channel = "1.61.0"' >> rust-toolchain
-          echo 'targets = ["wasm32-wasi"]' >> rust-toolchain
 
       - name: cargo test --target wasm32-wasi (with rlsf_override)
         uses: actions-rs/cargo@v1
