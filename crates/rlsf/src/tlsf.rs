@@ -228,19 +228,19 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     #[allow(dead_code)]
     const SLLEN: usize = SLLEN;
 
-    /// Evaluates successfully if the parameters are valid.
+    /// Evaluates successfully only if the parameters are valid.
     const VALID: () = {
         if FLLEN == 0 {
-            const_panic!("`FLLEN` must not be zero");
+            panic!("`FLLEN` must not be zero");
         }
         if SLLEN == 0 {
-            const_panic!("`SLLEN` must not be zero");
+            panic!("`SLLEN` must not be zero");
         }
         if (FLBitmap::BITS as u128) < FLLEN as u128 {
-            const_panic!("`FLBitmap` should contain at least `FLLEN` bits");
+            panic!("`FLBitmap` should contain at least `FLLEN` bits");
         }
         if (SLBitmap::BITS as u128) < SLLEN as u128 {
-            const_panic!("`SLBitmap` should contain at least `SLLEN` bits");
+            panic!("`SLBitmap` should contain at least `SLLEN` bits");
         }
     };
 
@@ -260,7 +260,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     const SLI: u32 = if SLLEN.is_power_of_two() {
         SLLEN.trailing_zeros()
     } else {
-        const_panic!("`SLLEN` is not power of two")
+        panic!("`SLLEN` is not power of two")
     };
 
     /// Find the free block list to store a free block of the specified size.

@@ -2,17 +2,6 @@
 #![no_std]
 #![cfg_attr(feature = "doc_cfg", feature(doc_cfg))]
 
-// FIXME: panicking in constants is unstable
-macro_rules! const_panic {
-    ($($tt:tt)*) => {
-        #[allow(unconditional_panic)]
-        {
-            let _ = 1 / 0;
-            loop {}
-        }
-    };
-}
-
 mod flex;
 pub mod int;
 mod tlsf;

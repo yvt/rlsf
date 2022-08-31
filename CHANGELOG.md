@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 
 - Documentation improvements
+- Descriptive compile-time panic messages
 - **Breaking:** Raised the minimum supported Rust version to 1.61
 
 ### Added

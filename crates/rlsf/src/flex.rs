@@ -135,7 +135,7 @@ impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> GlobalAllocAsFlexSource<T,
             ALIGN
         }
     } else {
-        const_panic!("`ALIGN` is not power of two")
+        panic!("`ALIGN` is not power of two")
     };
 }
 
@@ -217,7 +217,7 @@ struct PoolFtr {
 }
 
 const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
-    const_panic!("bad `PoolFtr` size");
+    panic!("bad `PoolFtr` size");
 };
 
 impl PoolFtr {
