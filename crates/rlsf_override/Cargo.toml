@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 path = "src/lib.rs"
 
 [dependencies]
-rlsf = { version = "0.1.2", path = "../rlsf" }
+rlsf = { version = "0.2.0", path = "../rlsf" }
 libc = "0.2.50"
 
 [dev-dependencies]
