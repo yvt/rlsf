@@ -4,6 +4,7 @@ version = "0.1.2"
 authors = ["yvt <i@yvt.jp>"]
 license = "MIT/Apache-2.0"
 edition = "2018"
+rust-version = "1.61"
 readme = "README.md"
 description = "Real-time dynamic memory allocator based on the TLSF algorithm"
 categories = ["embedded", "no-std", "wasm", "memory-management", "web-programming"]

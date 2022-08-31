@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
 - Documentation improvements
+- **Breaking:** Raised the minimum supported Rust version to 1.61
+
+### Added
+
 - **Added:** `CAlloc::allocation_usable_size`
 
 ## [0.1.2] - 2021-05-30
