@@ -26,6 +26,7 @@ macro_rules! if_supported_target {
     ) => {
         #[cfg(any(
             all(target_arch = "wasm32", not(target_feature = "atomics")),
+            not(target_feature = "atomics"),
             unix,
             doc,
         ))]
