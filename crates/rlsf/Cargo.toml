@@ -11,12 +11,12 @@ categories = ["embedded", "no-std", "wasm", "memory-management", "web-programmin
 repository = "https://github.com/yvt/rlsf"
 
 [features]
-doc_cfg = []
+doc_cfg = ["svgbobdoc/enable"]
 std = []
 unstable = []
 
 [dependencies]
-svgbobdoc = { version = "0.2.2" }
+svgbobdoc = { version = "0.3.0" }
 cfg-if = "1.0.0"
 const_default1 = { version = "1", package = "const-default" }
 
