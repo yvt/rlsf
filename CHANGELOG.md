@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Bump `svgbobdoc` to `^0.3` to address a future-incompat report
+  [rust-lang/rust#79813](https://github.com/rust-lang/rust/issues/79813)
+
 ## [0.2.0] - 2022-08-31
 
 ### Changed
