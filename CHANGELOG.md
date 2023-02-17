@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Bump `svgbobdoc` to `^0.3` to address a future-incompat report
   [rust-lang/rust#79813](https://github.com/rust-lang/rust/issues/79813)
+- Don't enable the default features of
+  [`const-default`](https://crates.io/crates/const-default/1.0.0) so that it
+  can compile for targets with no atomics support
 
 ## [0.2.0] - 2022-08-31
 
