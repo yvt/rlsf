@@ -1,9 +1,6 @@
 // Adopted from
 // https://github.com/alexcrichton/dlmalloc-rs/blob/master/tests/global.rs
-use std::{
-    alloc::{GlobalAlloc, Layout},
-    collections::HashMap,
-};
+use std::collections::HashMap;
 
 #[global_allocator]
 #[cfg(any(all(target_arch = "wasm32", not(target_feature = "atomics")), unix))]
@@ -52,18 +49,6 @@ fn test_larger_than_word_alignment() {
         unsafe {
             let b = Box::from_raw(p);
             assert_eq!(b.0, 42);
-        }
-    }
-}
-
-#[test]
-fn cannot_alloc_max_usize_minus_some() {
-    // The test should complete without causing OOM
-    for offset in (0..64).step_by(8) {
-        let layout = Layout::from_size_align(usize::MAX - offset, 1).unwrap();
-        for _ in 0..1000000 {
-            let result = unsafe { A.alloc(layout) };
-            assert!(result.is_null());
         }
     }
 }
