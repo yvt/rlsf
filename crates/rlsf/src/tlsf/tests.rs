@@ -11,6 +11,7 @@ struct Align<T>(T);
 /// filtered separately with `env_logger`
 mod blocks_checker {
     use super::*;
+    #[cfg(feature = "unstable")]
     use std::ptr::NonNull;
 
     pub unsafe fn trace_blocks<const FLLEN: usize, const SLLEN: usize>(
@@ -32,6 +33,9 @@ mod blocks_checker {
 
             log::trace!("blocks = {:?}", blocks);
         }
+
+        #[cfg(not(feature = "unstable"))]
+        let _ = (pool_ptr, pool_len, tlsf);
     }
 }
 

@@ -1,8 +1,10 @@
 //! The TLSF allocator core
 use const_default1::ConstDefault;
+#[cfg(feature = "unstable")]
+use core::fmt;
 use core::{
     alloc::Layout,
-    debug_assert, debug_assert_eq, fmt,
+    debug_assert, debug_assert_eq,
     hint::unreachable_unchecked,
     marker::PhantomData,
     mem::{self, MaybeUninit},
