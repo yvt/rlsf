@@ -11,7 +11,7 @@ pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::new();
 
 /// The alignment guaranteed by `malloc`.
 const MIN_ALIGN: usize = match () {
-    #[cfg(all(any(
+    #[cfg(any(
         target_arch = "x86",
         target_arch = "arm",
         target_arch = "mips",
@@ -22,16 +22,16 @@ const MIN_ALIGN: usize = match () {
         target_arch = "wasm32",
         target_arch = "hexagon",
         target_arch = "riscv32"
-    )))]
+    ))]
     () => 8,
-    #[cfg(all(any(
+    #[cfg(any(
         target_arch = "x86_64",
         target_arch = "aarch64",
         target_arch = "mips64",
         target_arch = "s390x",
         target_arch = "sparc64",
         target_arch = "riscv64"
-    )))]
+    ))]
     () => 16,
 };
 
