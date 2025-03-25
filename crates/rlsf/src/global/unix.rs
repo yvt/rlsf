@@ -1,7 +1,7 @@
 use const_default1::ConstDefault;
 use core::{
     marker::PhantomData,
-    ptr::{null_mut, NonNull},
+    ptr::{addr_of_mut, null_mut, NonNull},
 };
 
 use super::GlobalTlsfOptions;
@@ -24,12 +24,12 @@ static mut MUTEX: libc::pthread_mutex_t = libc::PTHREAD_MUTEX_INITIALIZER;
 impl Mutex {
     #[inline]
     pub fn lock(&self) {
-        unsafe { libc::pthread_mutex_lock(&mut MUTEX) };
+        unsafe { libc::pthread_mutex_lock(addr_of_mut!(MUTEX)) };
     }
 
     #[inline]
     pub fn unlock(&self) {
-        unsafe { libc::pthread_mutex_unlock(&mut MUTEX) };
+        unsafe { libc::pthread_mutex_unlock(addr_of_mut!(MUTEX)) };
     }
 }
 
