@@ -110,7 +110,7 @@ struct BlockHdr {
     ///  - `bit[0]` ([`SIZE_USED`]) indicates whether the block is a used memory
     ///    block or not.
     ///
-    ///  - `bit[1]` ([`SIZE_LAST_IN_POOL`]) indicates whether the block is the
+    ///  - `bit[1]` ([`SIZE_SENTINEL`]) indicates whether the block is the
     ///    last one of the pool or not.
     ///
     ///  - `bit[GRANULARITY_LOG2..]` ([`SIZE_SIZE_MASK`]) represents the size.
@@ -143,7 +143,7 @@ impl BlockHdr {
             "`self` must not be a sentinel"
         );
 
-        // Safety: Since `self.size & SIZE_LAST_IN_POOL` is not lying, the
+        // Safety: Since `self.size & SIZE_SENTINEL` is not lying, the
         //         next block should exist at a non-null location.
         NonNull::new_unchecked((self as *const _ as *mut u8).add(self.size & SIZE_SIZE_MASK)).cast()
     }
@@ -1049,7 +1049,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             );
 
             // It's coalescable. Add its size to `size`. This will transfer
-            // any `SIZE_LAST_IN_POOL` flag `next_phys_block` may have at
+            // any `SIZE_SENTINEL` flag `next_phys_block` may have at
             // the same time.
             size += next_phys_block_size;
 
