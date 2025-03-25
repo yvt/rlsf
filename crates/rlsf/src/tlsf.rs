@@ -918,7 +918,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Safety
     ///
     ///  - `ptr` must point to an allocated memory block returned by
-    ///      `Self::{allocate, reallocate}`.
+    ///    `Self::{allocate, reallocate}`.
     ///
     ///  - The memory block must have been allocated with the same alignment
     ///    ([`Layout::align`]) as `align`.
@@ -945,7 +945,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Safety
     ///
     ///  - `ptr` must point to an allocated memory block returned by
-    ///      `Self::{allocate, reallocate}`.
+    ///    `Self::{allocate, reallocate}`.
     ///
     #[inline]
     unsafe fn used_block_hdr_for_allocation_unknown_align(
