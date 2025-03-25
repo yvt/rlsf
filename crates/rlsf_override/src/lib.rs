@@ -10,6 +10,8 @@ use std::{
 pub static ALLOC: rlsf::GlobalTlsf = rlsf::GlobalTlsf::new();
 
 /// The alignment guaranteed by `malloc`.
+// `target_arch = "asmjs"` was removed in Rust 1.76.0
+#[allow(unexpected_cfgs)]
 const MIN_ALIGN: usize = match () {
     #[cfg(any(
         target_arch = "x86",
