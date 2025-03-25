@@ -1048,9 +1048,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 next_phys_block_size
             );
 
-            // It's coalescable. Add its size to `size`. This will transfer
-            // any `SIZE_SENTINEL` flag `next_phys_block` may have at
-            // the same time.
+            // It's coalescable. Add its size to `size`.
             size += next_phys_block_size;
 
             // Safety: `next_phys_block` is a free block and therefore is not a
