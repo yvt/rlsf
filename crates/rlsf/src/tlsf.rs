@@ -1541,11 +1541,15 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 let block_hdr = &*(start as *const BlockHdr);
                 let block_size = block_hdr.size & SIZE_SIZE_MASK;
 
-                // Advance the cursor
-                len -= block_size;
-                start = start.wrapping_add(block_size);
+                if block_size != 0 {
+                    // Advance the cursor
+                    len -= block_size;
+                    start = start.wrapping_add(block_size);
 
-                Some(BlockInfo { block_hdr })
+                    Some(BlockInfo { block_hdr })
+                } else {
+                    None
+                }
             }
         })
         .filter(|block_info| {
