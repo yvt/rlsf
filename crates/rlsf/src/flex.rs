@@ -1,6 +1,6 @@
 //! An allocator with flexible backing stores
 use const_default1::ConstDefault;
-use core::{alloc::Layout, debug_assert, ptr::NonNull, unimplemented};
+use core::{alloc::Layout, debug_assert, mem::MaybeUninit, ptr::NonNull, unimplemented};
 
 use super::{
     int::BinInteger,
@@ -21,7 +21,7 @@ pub unsafe trait FlexSource {
     /// `min_size` must be a multiple of [`GRANULARITY`]. `min_size` must not
     /// be zero.
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         let _ = min_size;
         None
     }
@@ -37,7 +37,7 @@ pub unsafe trait FlexSource {
     #[inline]
     unsafe fn realloc_inplace_grow(
         &mut self,
-        ptr: NonNull<[u8]>,
+        ptr: NonNull<[MaybeUninit<u8>]>,
         min_new_len: usize,
     ) -> Option<usize> {
         let _ = (ptr, min_new_len);
@@ -50,7 +50,7 @@ pub unsafe trait FlexSource {
     ///
     /// `ptr` must denote an existing allocation made by this allocator.
     #[inline]
-    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<[MaybeUninit<u8>]>) {
         let _ = ptr;
         unimplemented!("`supports_dealloc` returned `true`, but `dealloc` is not implemented");
     }
@@ -147,24 +147,24 @@ unsafe impl<T: core::alloc::GlobalAlloc, const ALIGN: usize> FlexSource
     for GlobalAllocAsFlexSource<T, ALIGN>
 {
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         let layout = Layout::from_size_align(min_size, Self::ALIGN)
             .ok()?
             .pad_to_align();
         // Safety: The caller upholds that `min_size` is not zero
         let start = self.0.alloc(layout);
         let start = NonNull::new(start)?;
-        Some(nonnull_slice_from_raw_parts(start, layout.size()))
+        Some(nonnull_slice_from_raw_parts(start.cast(), layout.size()))
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<[MaybeUninit<u8>]>) {
         // Safety: This layout was previously used for allocation, during which
         //         the layout was checked for validity
         let layout = Layout::from_size_align_unchecked(nonnull_slice_len(ptr), Self::ALIGN);
 
         // Safety: `start` denotes an existing allocation with layout `layout`
-        self.0.dealloc(ptr.as_ptr() as _, layout);
+        self.0.dealloc(ptr.as_ptr() as *mut u8, layout);
     }
 
     fn supports_dealloc(&self) -> bool {
@@ -191,7 +191,7 @@ pub struct FlexTlsf<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, 
 #[derive(Debug, Copy, Clone)]
 struct Pool {
     /// The starting address of the memory allocation.
-    alloc_start: NonNull<u8>,
+    alloc_start: NonNull<MaybeUninit<u8>>,
     /// The length of the memory allocation.
     alloc_len: usize,
     /// The length of the memory pool created within the allocation.
@@ -213,7 +213,7 @@ unsafe impl Sync for Pool {}
 #[derive(Copy, Clone)]
 struct PoolFtr {
     /// The previous allocation. Forms a singly-linked list.
-    prev_alloc: Option<NonNull<[u8]>>,
+    prev_alloc: Option<NonNull<[MaybeUninit<u8>]>>,
 }
 
 const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
@@ -223,7 +223,7 @@ const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
 impl PoolFtr {
     /// Get a pointer to `PoolFtr` for a given allocation.
     #[inline]
-    fn get_for_alloc(alloc: NonNull<[u8]>, alloc_align: usize) -> *mut Self {
+    fn get_for_alloc(alloc: NonNull<[MaybeUninit<u8>]>, alloc_align: usize) -> *mut Self {
         let alloc_end = nonnull_slice_end(alloc);
         let mut ptr = alloc_end.wrapping_sub(core::mem::size_of::<Self>());
         // If `alloc_end` is not well-aligned, we need to adjust the location

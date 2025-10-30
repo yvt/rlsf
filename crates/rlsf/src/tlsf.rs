@@ -448,7 +448,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// static mut POOL: MaybeUninit<[u8; 1024]> = MaybeUninit::uninit();
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// unsafe {
-    ///     tlsf.insert_free_block_ptr(NonNull::new(POOL.as_mut_ptr()).unwrap());
+    ///     let mut pool_ptr = NonNull::new(POOL.as_mut_ptr()).unwrap().cast::<[MaybeUninit<u8>; 1024]>();
+    ///     tlsf.insert_free_block_ptr(NonNull::from(pool_ptr.as_mut()));
     /// }
     /// ```
     ///
@@ -460,7 +461,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Panics
     ///
     /// This method never panics.
-    pub unsafe fn insert_free_block_ptr(&mut self, block: NonNull<[u8]>) -> Option<NonZeroUsize> {
+    pub unsafe fn insert_free_block_ptr(&mut self, block: NonNull<[MaybeUninit<u8>]>) -> Option<NonZeroUsize> {
         let len = nonnull_slice_len(block);
 
         // Round up the starting address
@@ -480,7 +481,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Safety: The slice being created here
         let pool_len = self.insert_free_block_ptr_aligned(NonNull::new_unchecked(
-            core::ptr::slice_from_raw_parts_mut(start as *mut u8, len),
+            core::ptr::slice_from_raw_parts_mut(start as *mut MaybeUninit<u8>, len),
         ))?;
 
         // Safety: The sum should not wrap around because it represents the size
@@ -493,7 +494,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// [`insert_free_block_ptr`] with a well-aligned slice passed by `block`.
     pub(crate) unsafe fn insert_free_block_ptr_aligned(
         &mut self,
-        block: NonNull<[u8]>,
+        block: NonNull<[MaybeUninit<u8>]>,
     ) -> Option<NonZeroUsize> {
         let start = block.as_ptr() as *mut u8 as usize;
         let mut size = nonnull_slice_len(block);
@@ -575,21 +576,21 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// let mut tlsf: Tlsf<u8, u8, 8, 8> = Tlsf::new();
     /// let pool0_len = unsafe {
     ///     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
-    ///         NonNull::new(cursor).unwrap(), remaining_len / 2))
+    ///         NonNull::new(cursor as *mut MaybeUninit<u8>).unwrap(), remaining_len / 2))
     /// }.unwrap().get();
     /// cursor = cursor.wrapping_add(pool0_len);
     /// remaining_len -= pool0_len;
     ///
     /// let pool1_len = unsafe {
     ///     tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
-    ///         NonNull::new(cursor).unwrap(), remaining_len / 2))
+    ///         NonNull::new(cursor as *mut MaybeUninit<u8>).unwrap(), remaining_len / 2))
     /// };
     /// cursor = cursor.wrapping_add(pool1_len);
     /// remaining_len -= pool1_len;
     ///
     /// let pool2_len = unsafe {
     ///     tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
-    ///         NonNull::new(cursor).unwrap(), remaining_len))
+    ///         NonNull::new(cursor as *mut MaybeUninit<u8>).unwrap(), remaining_len))
     /// };
     /// cursor = cursor.wrapping_add(pool2_len);
     /// remaining_len -= pool2_len;
@@ -611,7 +612,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     /// # Panics
     ///
     /// This method never panics.
-    pub unsafe fn append_free_block_ptr(&mut self, block: NonNull<[u8]>) -> usize {
+    pub unsafe fn append_free_block_ptr(&mut self, block: NonNull<[MaybeUninit<u8>]>) -> usize {
         // Round down the length
         let start = nonnull_slice_start(block);
         let len = nonnull_slice_len(block) & !(GRANULARITY - 1);
@@ -663,7 +664,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             self.unlink_free_block(free_block, free_block_size);
 
             // Assimilation success
-            start = free_block.as_ptr() as *mut u8;
+            start = free_block.as_ptr() as *mut MaybeUninit<u8>;
             last_nonassimilated_block = free_block.as_ref().common.prev_phys_block;
         } else {
             // Assimilation failed
@@ -735,7 +736,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     pub fn insert_free_block(&mut self, block: &'pool mut [MaybeUninit<u8>]) -> impl Send + Sync {
         // Safety: `block` is a mutable reference, which guarantees the absence
         // of aliasing references. Being `'pool` means it will outlive `self`.
-        unsafe { self.insert_free_block_ptr(NonNull::new(block as *mut [_] as _).unwrap()) };
+        unsafe { self.insert_free_block_ptr(NonNull::from(block)) };
     }
 
     /// Calculate the minimum size of a `GRANULARITY`-byte aligned memory pool

@@ -145,7 +145,7 @@ macro_rules! gen_test {
 
                 let pool0_len = unsafe {
                     tlsf.insert_free_block_ptr(nonnull_slice_from_raw_parts(
-                        NonNull::new(cursor).unwrap(), remaining_len / 2))
+                        NonNull::new(cursor as *mut MaybeUninit<u8>).unwrap(), remaining_len / 2))
                 }.unwrap().get();
                 cursor = cursor.wrapping_add(pool0_len);
                 remaining_len -= pool0_len;
@@ -157,7 +157,7 @@ macro_rules! gen_test {
 
                 let _pool1_len = unsafe {
                     tlsf.append_free_block_ptr(nonnull_slice_from_raw_parts(
-                        NonNull::new(cursor).unwrap(), remaining_len))
+                        NonNull::new(cursor as *mut MaybeUninit<u8>).unwrap(), remaining_len))
                 };
 
                 log::trace!("tlsf = {:?}", tlsf);
@@ -225,7 +225,7 @@ macro_rules! gen_test {
                     pool_limit = pool.0.len() - pool_start;
 
                     let initial_pool = NonNull::new(std::ptr::slice_from_raw_parts_mut(
-                        pool_ptr,
+                        pool_ptr as *mut MaybeUninit<u8>,
                         pool_size
                     )).unwrap();
                     log::trace!("initial_pool = {:p}: [u8; {}]", pool_ptr, pool_size);
@@ -336,7 +336,7 @@ macro_rules! gen_test {
                                 u16::from_le_bytes([it.next()?, it.next()?]) as usize % (available + 1);
 
                             let appended = nonnull_slice_from_raw_parts(
-                                NonNull::new(pool_ptr.wrapping_add(old_pool_len)).unwrap(),
+                                NonNull::new(pool_ptr.wrapping_add(old_pool_len) as *mut MaybeUninit<u8>).unwrap(),
                                 num_appended_bytes,
                             );
 

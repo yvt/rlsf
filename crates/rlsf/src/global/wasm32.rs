@@ -1,5 +1,5 @@
 use const_default1::ConstDefault;
-use core::{arch::wasm32, marker::PhantomData, ptr::NonNull};
+use core::{arch::wasm32, marker::PhantomData, mem::MaybeUninit, ptr::NonNull};
 
 use super::GlobalTlsfOptions;
 
@@ -31,7 +31,7 @@ const PAGE_SIZE: usize = 1 << PAGE_SIZE_LOG2;
 
 unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Options> {
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         let num_pages = min_size.checked_add(PAGE_SIZE - 1)? / PAGE_SIZE;
         let num_bytes = num_pages * PAGE_SIZE;
 
@@ -43,7 +43,7 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         } else {
             Some(
                 NonNull::new(core::ptr::slice_from_raw_parts_mut(
-                    (old_num_pages * PAGE_SIZE) as *mut u8,
+                    (old_num_pages * PAGE_SIZE) as *mut MaybeUninit<u8>,
                     num_bytes,
                 ))
                 // Assume the old memory size is non-zero. It's likely to be
@@ -56,7 +56,7 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
     #[inline]
     unsafe fn realloc_inplace_grow(
         &mut self,
-        ptr: NonNull<[u8]>,
+        ptr: NonNull<[MaybeUninit<u8>]>,
         min_new_len: usize,
     ) -> Option<usize> {
         if !Options::COALESCE_POOLS {

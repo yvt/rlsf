@@ -1,6 +1,7 @@
 use const_default1::ConstDefault;
 use core::{
     marker::PhantomData,
+    mem::MaybeUninit,
     ptr::{addr_of_mut, null_mut, NonNull},
 };
 
@@ -73,7 +74,7 @@ fn ensure_page_size_m1() -> usize {
 
 unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Options> {
     #[inline]
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         let page_size_m1 = ensure_page_size_m1();
         let num_bytes = min_size.checked_add(page_size_m1)? & !page_size_m1;
 
@@ -91,7 +92,7 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
         }
 
         NonNull::new(core::ptr::slice_from_raw_parts_mut(
-            ptr as *mut u8,
+            ptr as *mut MaybeUninit<u8>,
             num_bytes,
         ))
     }
@@ -101,7 +102,7 @@ unsafe impl<Options: GlobalTlsfOptions> crate::flex::FlexSource for Source<Optio
     #[cfg(target_os = "linux")]
     unsafe fn realloc_inplace_grow(
         &mut self,
-        ptr: NonNull<[u8]>,
+        ptr: NonNull<[MaybeUninit<u8>]>,
         min_new_len: usize,
     ) -> Option<usize> {
         use crate::utils::nonnull_slice_len;

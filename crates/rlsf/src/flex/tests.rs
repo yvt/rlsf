@@ -6,6 +6,7 @@ use crate::{
     tests::ShadowAllocator,
     utils::{nonnull_slice_end, nonnull_slice_len},
 };
+use core::mem::MaybeUninit;
 
 trait TestFlexSource: FlexSource {
     type Options: quickcheck::Arbitrary;
@@ -54,24 +55,24 @@ impl<T: FlexSource> Drop for TrackingFlexSource<T> {
 }
 
 unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         log::trace!("FlexSource::alloc({:?})", min_size);
         let range = self.inner.alloc(min_size)?;
         log::trace!(" FlexSource::alloc(...) = {:?}", range);
-        self.sa.insert_free_block(range.as_ptr());
+        self.sa.insert_free_block(range.as_ptr() as *const [u8]);
         Some(range)
     }
 
     unsafe fn realloc_inplace_grow(
         &mut self,
-        ptr: NonNull<[u8]>,
+        ptr: NonNull<[MaybeUninit<u8>]>,
         min_new_len: usize,
     ) -> Option<usize> {
         log::trace!("FlexSource::realloc_inplace_grow{:?}", (ptr, min_new_len));
         let new_len = self.inner.realloc_inplace_grow(ptr, min_new_len)?;
         log::trace!(" FlexSource::realloc_inplace_grow(...) = {:?}", new_len);
         self.sa.append_free_block(std::ptr::slice_from_raw_parts(
-            nonnull_slice_end(ptr),
+            nonnull_slice_end(ptr) as *const u8,
             new_len - nonnull_slice_len(ptr),
         ));
         Some(new_len)
@@ -83,12 +84,12 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
+    unsafe fn dealloc(&mut self, ptr: NonNull<[MaybeUninit<u8>]>) {
         // TODO: check that `ptr` represents an exact allocation, not just
         //       a part of it
         self.inner.dealloc(ptr);
         log::trace!("FlexSource::dealloc({:?})", ptr);
-        self.sa.remove_pool(ptr.as_ptr());
+        self.sa.remove_pool(ptr.as_ptr() as *const [u8]);
     }
 
     #[inline]
@@ -133,19 +134,20 @@ impl TestFlexSource for CgFlexSource {
 }
 
 unsafe impl FlexSource for CgFlexSource {
-    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[u8]>> {
+    unsafe fn alloc(&mut self, min_size: usize) -> Option<NonNull<[MaybeUninit<u8>]>> {
         let allocated = self.allocated;
         let new_allocated = allocated
             .checked_add(min_size)
             .filter(|&x| x <= self.pool.len())?;
 
         self.allocated = new_allocated;
-        Some(NonNull::from(&mut self.pool[allocated..new_allocated]))
+        let slice: &mut [u8] = &mut self.pool[allocated..new_allocated];
+        Some(NonNull::from(&mut *(slice as *mut [u8] as *mut [MaybeUninit<u8>])))
     }
 
     unsafe fn realloc_inplace_grow(
         &mut self,
-        ptr: NonNull<[u8]>,
+        ptr: NonNull<[MaybeUninit<u8>]>,
         min_new_len: usize,
     ) -> Option<usize> {
         self.alloc(min_new_len - nonnull_slice_len(ptr))
@@ -166,7 +168,6 @@ unsafe impl FlexSource for CgFlexSource {
 }
 
 fn fill_data(p: NonNull<[u8]>) {
-    use std::mem::MaybeUninit;
     let slice = unsafe { &mut *(p.as_ptr() as *mut [MaybeUninit<u8>]) };
     for (i, p) in slice.iter_mut().enumerate() {
         *p = MaybeUninit::new((i as u8).reverse_bits());
