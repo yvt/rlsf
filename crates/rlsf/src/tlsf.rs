@@ -375,7 +375,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             unreachable_unchecked()
         });
         let first_free = &mut self.first_free[fl][sl];
-        let next_free = mem::replace(first_free, Some(block));
+        let next_free = first_free.replace(block);
         block.as_mut().next_free = next_free;
         block.as_mut().prev_free = None;
         if let Some(mut next_free) = next_free {
