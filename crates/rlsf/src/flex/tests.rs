@@ -86,9 +86,9 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         // TODO: check that `ptr` represents an exact allocation, not just
         //       a part of it
+        self.sa.remove_pool(ptr.as_ptr());
         self.inner.dealloc(ptr);
         log::trace!("FlexSource::dealloc({:?})", ptr);
-        self.sa.remove_pool(ptr.as_ptr());
     }
 
     #[inline]
