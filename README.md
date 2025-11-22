@@ -45,7 +45,7 @@ This crate implements the TLSF (Two-Level Segregated Fit) dynamic memory allocat
   You should consider using a thread-caching memory allocator (e.g., TCMalloc, jemalloc) if achieving a maximal throughput in a highly concurrent environment is desired.
 
 - **Complete reliance on segregated freelists means internal fragmentation proportional to free block sizes.**
-  The `SLLEN` paramter allows for adjusting the trade-off between fewer freelists and lower fragmentation.
+  The `SLLEN` parameter allows for adjusting the trade-off between fewer freelists and lower fragmentation.
 
 - **No special handling for small allocations (one algorithm for all sizes).**
   This may lead to inefficiencies in allocation-heavy applications compared to modern scalable memory allocators, such as glibc and jemalloc.
