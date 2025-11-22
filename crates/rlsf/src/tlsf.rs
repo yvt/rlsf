@@ -9,7 +9,7 @@ use core::{
     marker::PhantomData,
     mem::{self, MaybeUninit},
     num::NonZeroUsize,
-    ptr::{addr_of, addr_of_mut, NonNull},
+    ptr::{addr_of, NonNull},
 };
 
 use crate::{
@@ -521,8 +521,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             };
 
             // Cap the end with a sentinel block (a permanently-used block)
-            let mut sentinel_block = BlockHdr::next_phys_block(addr_of_mut!(block.as_mut().common))
-                .cast::<UsedBlockHdr>();
+            let mut sentinel_block =
+                BlockHdr::next_phys_block(nn_field!(block, common)).cast::<UsedBlockHdr>();
 
             sentinel_block.as_mut().common = BlockHdr {
                 size: GRANULARITY | SIZE_USED | SIZE_SENTINEL,
@@ -789,13 +789,12 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
             // Get a free block: `block`
             let first_free = self.first_free.get_unchecked_mut(fl).get_unchecked_mut(sl);
-            let mut block = first_free.unwrap_or_else(|| {
+            let block = first_free.unwrap_or_else(|| {
                 debug_assert!(false, "bitmap outdated");
                 // Safety: It's unreachable
                 unreachable_unchecked()
             });
-            let mut next_phys_block =
-                BlockHdr::next_phys_block(addr_of_mut!(block.as_mut().common));
+            let mut next_phys_block = BlockHdr::next_phys_block(nn_field!(block, common));
             let size_and_flags = block.as_ref().common.size;
             let size = size_and_flags /* size_and_flags & SIZE_SIZE_MASK */;
             debug_assert_eq!(size, size_and_flags & SIZE_SIZE_MASK);
@@ -1091,13 +1090,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         block.as_mut().size = size;
 
         // Link this free block to the corresponding free list
-        let mut block = block.cast::<FreeBlockHdr>();
+        let block = block.cast::<FreeBlockHdr>();
         self.link_free_block(block, size);
 
         // Link `new_next_phys_block.prev_phys_block` to `block`
         debug_assert_eq!(
             new_next_phys_block,
-            BlockHdr::next_phys_block(addr_of_mut!(block.as_mut().common))
+            BlockHdr::next_phys_block(nn_field!(block, common))
         );
         new_next_phys_block.as_mut().prev_phys_block = Some(block.cast());
     }
@@ -1252,8 +1251,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
                 let mut new_free_block_size = shrink_by;
 
                 // If the next block is a free block...
-                let mut next_phys_block =
-                    BlockHdr::next_phys_block(addr_of_mut!(block.as_mut().common));
+                let mut next_phys_block = BlockHdr::next_phys_block(nn_field!(block, common));
                 let next_phys_block_size_and_flags = next_phys_block.as_ref().size;
                 if (next_phys_block_size_and_flags & SIZE_USED) == 0 {
                     let next_phys_block_size = next_phys_block_size_and_flags;
@@ -1294,7 +1292,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         debug_assert!(new_size > old_size);
 
         let grow_by = new_size - old_size;
-        let next_phys_block = BlockHdr::next_phys_block(addr_of_mut!(block.as_mut().common));
+        let next_phys_block = BlockHdr::next_phys_block(nn_field!(block, common));
 
         // If we removed this block, there would be a continous free space of
         // `moving_clearance` bytes, which is followed by `moving_clearance_end`
@@ -1320,7 +1318,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             // Now we know it's really a free block.
             let mut next_phys_block = next_phys_block.cast::<FreeBlockHdr>();
             let mut next_next_phys_block =
-                BlockHdr::next_phys_block(addr_of_mut!(next_phys_block.as_mut().common));
+                BlockHdr::next_phys_block(nn_field!(next_phys_block, common));
 
             moving_clearance += next_phys_block_size;
             moving_clearance_end = next_next_phys_block;

@@ -37,3 +37,10 @@ pub fn nonnull_slice_start<T>(ptr: NonNull<[T]>) -> NonNull<T> {
 pub unsafe fn nonnull_slice_end<T>(ptr: NonNull<[T]>) -> *mut T {
     (ptr.as_ptr() as *mut T).wrapping_add(nonnull_slice_len(ptr))
 }
+
+/// Get a pointer to a field in `NonNull<Struct>`.
+macro_rules! nn_field {
+    ($ptr:expr, $($tt:tt)*) => {
+        core::ptr::addr_of_mut!((*$ptr.as_ptr()).$($tt)*)
+    };
+}
