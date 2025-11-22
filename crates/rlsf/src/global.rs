@@ -106,6 +106,13 @@ impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     }
 }
 
+impl<Options: GlobalTlsfOptions> Default for GlobalTlsf<Options> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Options: GlobalTlsfOptions> GlobalTlsf<Options> {
     #[inline]
     fn lock_inner(&self) -> impl ops::DerefMut<Target = TheTlsf<Options>> + '_ {

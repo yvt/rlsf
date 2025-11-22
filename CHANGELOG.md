@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `GlobalTlsf` now implements `Default`.
+
 ## [0.2.1] - 2023-02-17
 
 ### Fixed
