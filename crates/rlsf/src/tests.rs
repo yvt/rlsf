@@ -1,4 +1,7 @@
-use std::{alloc::Layout, collections::BTreeMap, ops::Range, prelude::v1::*, ptr::NonNull};
+use std::{
+    alloc::Layout, cell::UnsafeCell, collections::BTreeMap, mem::MaybeUninit, ops::Range,
+    prelude::v1::*, ptr::NonNull,
+};
 
 #[derive(Debug)]
 pub struct ShadowAllocator {
@@ -121,7 +124,9 @@ impl ShadowAllocator {
 
     pub fn remove_pool<T>(&mut self, range: *const [T]) {
         let start = range as *const T as usize;
-        let end = unsafe { &*range }.len() + start;
+        // FIXME: Use `<*const [T]>::len` (stabilized in Rust 1.79)
+        // FIXME: Or at least `NonNull<[T]>::len` (stabilized in Rust 1.63)
+        let end = unsafe { &*(range as *const [MaybeUninit<UnsafeCell<T>>]) }.len() + start;
         if start >= end {
             return;
         }
