@@ -139,8 +139,8 @@ macro_rules! gen_test {
 
                 let mut tlsf: TheTlsf = Tlsf::new();
 
-                let mut pool = Align([MaybeUninit::uninit(); 512]);
-                let mut cursor = pool.0[0].as_mut_ptr() as *mut u8;
+                let mut pool = Align([MaybeUninit::<u8>::uninit(); 512]);
+                let mut cursor = pool.0.as_mut_ptr() as *mut u8;
                 let mut remaining_len = 512;
 
                 let pool0_len = unsafe {
