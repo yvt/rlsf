@@ -77,3 +77,19 @@ jobs:
         with:
           command: test
           args: --target wasm32-wasi -p rlsf nonexistent
+
+  test-miri:
+    name: Miri
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install nightly toolchain
+        run: |
+          echo nightly > rust-toolchain
+          rustup component add miri rust-src
+
+      - name: cargo miri test (partial)
+        # Miri is too slow to run all tests
+        run: cargo miri test -p rlsf --lib -- _u8_u8_8_8 global
