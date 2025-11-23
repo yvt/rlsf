@@ -222,8 +222,13 @@ const _: () = if core::mem::size_of::<PoolFtr>() != GRANULARITY / 2 {
 
 impl PoolFtr {
     /// Get a pointer to `PoolFtr` for a given allocation.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be dereferencable. This is a limitation of
+    /// [`nonnull_slice_end`].
     #[inline]
-    fn get_for_alloc(alloc: NonNull<[u8]>, alloc_align: usize) -> *mut Self {
+    unsafe fn get_for_alloc(alloc: NonNull<[u8]>, alloc_align: usize) -> *mut Self {
         let alloc_end = nonnull_slice_end(alloc);
         let mut ptr = alloc_end.wrapping_sub(core::mem::size_of::<Self>());
         // If `alloc_end` is not well-aligned, we need to adjust the location
@@ -375,17 +380,28 @@ impl<
                     // still uninitialized because this allocation is still in
                     // `self.growable_pool`, so we only have to move
                     // `PoolFtr::prev_alloc_end`.
-                    let old_pool_ftr = PoolFtr::get_for_alloc(
-                        nonnull_slice_from_raw_parts(
-                            growable_pool.alloc_start,
-                            growable_pool.alloc_len,
-                        ),
-                        self.source.min_align(),
-                    );
-                    let new_pool_ftr = PoolFtr::get_for_alloc(
-                        nonnull_slice_from_raw_parts(growable_pool.alloc_start, new_alloc_len),
-                        self.source.min_align(),
-                    );
+
+                    // Safety: The memory range represented by `growable_pool`
+                    // is dereferencable
+                    let old_pool_ftr = unsafe {
+                        PoolFtr::get_for_alloc(
+                            nonnull_slice_from_raw_parts(
+                                growable_pool.alloc_start,
+                                growable_pool.alloc_len,
+                            ),
+                            self.source.min_align(),
+                        )
+                    };
+
+                    // Safety: The memory range represented by `growable_pool`
+                    // extended to `new_alloc_len` is dereferencable
+                    let new_pool_ftr = unsafe {
+                        PoolFtr::get_for_alloc(
+                            nonnull_slice_from_raw_parts(growable_pool.alloc_start, new_alloc_len),
+                            self.source.min_align(),
+                        )
+                    };
+
                     // Safety: Both `*new_pool_ftr` and `*old_pool_ftr`
                     //         represent pool footers we control
                     unsafe { *new_pool_ftr = *old_pool_ftr };
@@ -480,7 +496,8 @@ impl<
         if self.source.supports_dealloc() {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the
             // previous pool (`self.growable_pool`).
-            let pool_ftr = PoolFtr::get_for_alloc(alloc, self.source.min_align());
+            // Safety: `alloc` is dereferencable
+            let pool_ftr = unsafe { PoolFtr::get_for_alloc(alloc, self.source.min_align()) };
             let prev_alloc = self
                 .growable_pool
                 .map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
@@ -492,7 +509,8 @@ impl<
         if use_growable_pool {
             self.growable_pool = Some(Pool {
                 alloc_start: nonnull_slice_start(alloc),
-                alloc_len: nonnull_slice_len(alloc),
+                // Safety: `alloc` is derefencable
+                alloc_len: unsafe { nonnull_slice_len(alloc) },
                 pool_len,
             });
         }
