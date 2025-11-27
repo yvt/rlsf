@@ -21,7 +21,8 @@ fn map() {
 
 #[test]
 fn strings() {
-    format!("foo, bar, {}", "baz");
+    // Format a string and throw it away
+    _ = format!("foo, bar, {}", "baz");
 }
 
 #[cfg(not(target_arch = "wasm32"))]
