@@ -206,6 +206,7 @@ unsafe impl Sync for Pool {}
 /// If set, unconditionally creates [`PoolFtr`] and sets
 /// [`FlexTlsf::growable_pool`] regardless of a provided [`FlexSource`]'s
 /// capabilities.
+// [tag:flex_force_pool_ftr_miri]
 const FORCE_POOL_FTR: bool = cfg!(miri);
 
 /// Pool footer stored at the end of each pool. It's only used when
@@ -638,6 +639,23 @@ impl<
     pub(crate) unsafe fn size_of_allocation_unknown_align(ptr: NonNull<u8>) -> usize {
         // Safety: Upheld by the caller
         Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::size_of_allocation_unknown_align(ptr)
+    }
+
+    /// Take a provenance-less allocation pointer and restore its provenance
+    /// so that it can be passed to [`Self::dealllocate`].
+    ///
+    /// [`Self::growable_pool`] must be in use for this method to work
+    /// correctly.
+    ///
+    /// This method panics if no memory pools contain the provided pointer.
+    #[cfg(miri)]
+    pub(crate) fn restore_provenance(&self, ptr: *mut u8) -> *mut u8 {
+        let pool = iter_pools(&self.growable_pool, self.source.min_align())
+            .filter(|pool| pool.as_ptr() as *mut u8 <= ptr)
+            .max()
+            .expect("original pool not found");
+
+        pool.as_ptr().cast::<u8>().with_addr(ptr.addr())
     }
 }
 
