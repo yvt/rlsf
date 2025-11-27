@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - `GlobalTlsf` now implements `Default`.
 
+### Fixed
+
+- Fixed illegal pointer operations. `{Flex,}Tlsf` no longer trigger errors when running in MIRI.
+
 ## [0.2.1] - 2023-02-17
 
 ### Fixed

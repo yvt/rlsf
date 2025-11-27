@@ -6,10 +6,12 @@
 #[doc = include_str!("../CHANGELOG.md")]
 pub mod _changelog_ {}
 
+#[macro_use]
+mod utils;
+
 mod flex;
 pub mod int;
 mod tlsf;
-mod utils;
 pub use self::{
     flex::*,
     tlsf::{Tlsf, GRANULARITY},

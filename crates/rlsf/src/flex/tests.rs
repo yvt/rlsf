@@ -86,9 +86,9 @@ unsafe impl<T: FlexSource> FlexSource for TrackingFlexSource<T> {
     unsafe fn dealloc(&mut self, ptr: NonNull<[u8]>) {
         // TODO: check that `ptr` represents an exact allocation, not just
         //       a part of it
+        self.sa.remove_pool(ptr.as_ptr());
         self.inner.dealloc(ptr);
         log::trace!("FlexSource::dealloc({:?})", ptr);
-        self.sa.remove_pool(ptr.as_ptr());
     }
 
     #[inline]
@@ -140,7 +140,21 @@ unsafe impl FlexSource for CgFlexSource {
             .filter(|&x| x <= self.pool.len())?;
 
         self.allocated = new_allocated;
-        Some(NonNull::from(&mut self.pool[allocated..new_allocated]))
+
+        // Slice the allocated of `self.pool`.
+        //
+        // - Do not do `&mut self.pool[..]` because mutably borrowing the whole
+        //   `*self.pool` would invalidate the borrows made by previous
+        //   allocations.
+        //
+        // - Do not create a mutable reference even to the sliced out part
+        //   because the resulting pointer could not be expanded by
+        //   `realloc_inplace_grow`.
+        let pool_ptr = self.pool.as_mut_ptr();
+        Some(crate::utils::nonnull_slice_from_raw_parts(
+            NonNull::new(pool_ptr.add(allocated)).unwrap(),
+            new_allocated - allocated,
+        ))
     }
 
     unsafe fn realloc_inplace_grow(
