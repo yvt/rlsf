@@ -40,7 +40,7 @@ impl ShadowAllocator {
         old_region: SaRegion,
         new_region: SaRegion,
     ) {
-        if range.len() == 0 {
+        if range.is_empty() {
             return;
         }
 
