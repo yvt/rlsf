@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 
 - Fixed illegal pointer operations. `{Flex,}Tlsf` no longer trigger errors when running in MIRI.
+- Implemented a work-around for `GlobalAlloc::{dealloc,realloc}` receiving allocation pointers with insufficient provenance on Miri.
 
 ## [0.2.1] - 2023-02-17
 
