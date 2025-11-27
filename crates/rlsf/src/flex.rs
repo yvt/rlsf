@@ -636,6 +636,20 @@ impl<
     }
 }
 
+/// Iterate over all memory pools linked to [`FlexTlsf::growable_pool`].
+#[inline]
+fn iter_pools(growable_pool: &Option<Pool>, align: usize) -> impl Iterator<Item = NonNull<[u8]>> {
+    let cur_alloc_or_none =
+        growable_pool.map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
+
+    core::iter::successors(cur_alloc_or_none, move |&cur_alloc| {
+        // Safety: We control the referenced pool footer
+        let cur_ftr = unsafe { *PoolFtr::get_for_alloc(cur_alloc, align) };
+
+        cur_ftr.prev_alloc
+    })
+}
+
 impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> Drop
     for FlexTlsf<Source, FLBitmap, SLBitmap, FLLEN, SLLEN>
 {
@@ -644,19 +658,9 @@ impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: us
             debug_assert!(self.source.use_growable_pool());
 
             // Deallocate all memory pools
-            let align = self.source.min_align();
-            let mut cur_alloc_or_none = self
-                .growable_pool
-                .map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
-
-            while let Some(cur_alloc) = cur_alloc_or_none {
-                // Safety: We control the referenced pool footer
-                let cur_ftr = unsafe { *PoolFtr::get_for_alloc(cur_alloc, align) };
-
+            for cur_alloc in iter_pools(&self.growable_pool, self.source.min_align()) {
                 // Safety: It's an allocation we allocated from `self.source`
                 unsafe { self.source.dealloc(cur_alloc) };
-
-                cur_alloc_or_none = cur_ftr.prev_alloc;
             }
         }
     }
