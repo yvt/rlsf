@@ -92,4 +92,6 @@ jobs:
 
       - name: cargo miri test (partial)
         # Miri is too slow to run all tests
-        run: cargo miri test -p rlsf --lib -- _u8_u8_8_8 global
+        run: |
+          cargo miri test -p rlsf --lib -- _u8_u8_8_8 global
+          cargo miri test -p rlsf --test global strings
