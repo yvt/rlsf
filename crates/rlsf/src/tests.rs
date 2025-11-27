@@ -52,7 +52,7 @@ impl ShadowAllocator {
             new_region
         );
 
-        let (&addr, &region) = self.regions.range(0..range.end).rev().next().unwrap();
+        let (&addr, &region) = self.regions.range(0..range.end).next_back().unwrap();
         if addr > range.start {
             panic!("there's a discontinuity in range {:?}", range);
         } else if region != old_region {
@@ -71,7 +71,7 @@ impl ShadowAllocator {
 
         // Each element must represent a discontinuity. If it doesnt't represent
         // a discontinuity, it must be removed.
-        if let Some((_, &region)) = self.regions.range(0..range.start).rev().next() {
+        if let Some((_, &region)) = self.regions.range(0..range.start).next_back() {
             if region == new_region {
                 self.regions.remove(&range.start);
             }
@@ -144,7 +144,7 @@ impl ShadowAllocator {
 
         // Create discontinuity at `end` if needed
         {
-            let (&addr, &region) = self.regions.range(0..=end).rev().next().unwrap();
+            let (&addr, &region) = self.regions.range(0..=end).next_back().unwrap();
             if addr < end && region != SaRegion::Invalid {
                 self.regions.insert(end, region);
             } else if addr == end && region == SaRegion::Invalid {
@@ -153,7 +153,7 @@ impl ShadowAllocator {
         }
 
         // Create discontinuity at `start` if needed
-        if let Some((_, &region)) = self.regions.range(0..start).rev().next() {
+        if let Some((_, &region)) = self.regions.range(0..start).next_back() {
             if region != SaRegion::Invalid {
                 self.regions.insert(start, SaRegion::Invalid);
             } else {
