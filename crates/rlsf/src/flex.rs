@@ -114,7 +114,7 @@ trait FlexSourceExt: FlexSource {
         // `growable_pool` is used for deallocation and pool growth.
         // Let's not think about the wasted space caused when this method
         // returns `false`.
-        self.supports_dealloc() || self.supports_realloc_inplace_grow()
+        self.supports_dealloc() || self.supports_realloc_inplace_grow() || FORCE_POOL_FTR
     }
 }
 
@@ -203,8 +203,13 @@ struct Pool {
 unsafe impl Send for Pool {}
 unsafe impl Sync for Pool {}
 
+/// If set, unconditionally creates [`PoolFtr`] and sets
+/// [`FlexTlsf::growable_pool`] regardless of a provided [`FlexSource`]'s
+/// capabilities.
+const FORCE_POOL_FTR: bool = cfg!(miri);
+
 /// Pool footer stored at the end of each pool. It's only used when
-/// supports_dealloc() == true`.
+/// supports_dealloc() == true` or [`FORCE_POOL_FTR`] is set.
 ///
 /// The footer is stored in the sentinel block's unused space or any padding
 /// present at the end of each pool. This is why `PoolFtr` can't be larger than
@@ -375,7 +380,7 @@ impl<
                     new_pool_len_desired,
                 )
             } {
-                if self.source.supports_dealloc() {
+                if self.source.supports_dealloc() || FORCE_POOL_FTR {
                     // Move `PoolFtr`. Note that `PoolFtr::alloc_start` is
                     // still uninitialized because this allocation is still in
                     // `self.growable_pool`, so we only have to move
@@ -493,7 +498,7 @@ impl<
         })
         .get();
 
-        if self.source.supports_dealloc() {
+        if self.source.supports_dealloc() || FORCE_POOL_FTR {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the
             // previous pool (`self.growable_pool`).
             // Safety: `alloc` is dereferencable
