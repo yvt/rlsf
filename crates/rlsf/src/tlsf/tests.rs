@@ -450,8 +450,7 @@ macro_rules! gen_test {
                 type Bk = Align<[u8; 64]>;
                 assert_eq!(std::mem::size_of::<Bk>(), 64);
                 assert_eq!(std::mem::align_of::<Bk>(), 64);
-                let mut pool: Vec<MaybeUninit<Bk>> = Vec::new();
-                pool.reserve((pool_size + 63) / 64);
+                let mut pool: Vec<MaybeUninit<Bk>> = Vec::with_capacity((pool_size + 63) / 64);
                 let pool = unsafe {
                     std::slice::from_raw_parts_mut(
                         pool.as_mut_ptr() as *mut MaybeUninit<u8>,
