@@ -161,6 +161,22 @@ unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Option
     #[inline]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: alloc::Layout) {
         let mut inner = self.lock_inner();
+
+        // [tag:global_dealloc_restore_provenance]
+        //
+        // <https://github.com/rust-lang/miri/issues/2104>
+        // In current Miri with Stacked Borrows aliasing model, global heap
+        // allocations lose the provenance for the memory outside `layout`,
+        // which prevents us from accessing their allocation metadata and
+        // adjacent memory blocks. To work around this, we restore the original
+        // provenance from the containing memory pool.
+        //
+        // [ref:flex_force_pool_ftr_miri]
+        // `restore_provenance` can be used here because `FlexTlsf::
+        // growable_pool` is unconditionally enabled in `cfg(miri)`.
+        #[cfg(miri)]
+        let ptr = inner.restore_provenance(ptr);
+
         // Safety: All allocations are non-null
         let ptr = NonNull::new_unchecked(ptr);
         // Safety: `ptr` denotes a previous allocation with alignment
@@ -171,6 +187,11 @@ unsafe impl<Options: GlobalTlsfOptions> alloc::GlobalAlloc for GlobalTlsf<Option
     #[inline]
     unsafe fn realloc(&self, ptr: *mut u8, layout: alloc::Layout, new_size: usize) -> *mut u8 {
         let mut inner = self.lock_inner();
+
+        // See [ref:global_dealloc_restore_provenance]
+        #[cfg(miri)]
+        let ptr = inner.restore_provenance(ptr);
+
         // Safety: All allocations are non-null
         let ptr = NonNull::new_unchecked(ptr);
         // Safety: `layout.align()` is a power of two, and the size parameter's

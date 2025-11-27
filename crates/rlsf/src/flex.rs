@@ -114,7 +114,7 @@ trait FlexSourceExt: FlexSource {
         // `growable_pool` is used for deallocation and pool growth.
         // Let's not think about the wasted space caused when this method
         // returns `false`.
-        self.supports_dealloc() || self.supports_realloc_inplace_grow()
+        self.supports_dealloc() || self.supports_realloc_inplace_grow() || FORCE_POOL_FTR
     }
 }
 
@@ -203,8 +203,14 @@ struct Pool {
 unsafe impl Send for Pool {}
 unsafe impl Sync for Pool {}
 
+/// If set, unconditionally creates [`PoolFtr`] and sets
+/// [`FlexTlsf::growable_pool`] regardless of a provided [`FlexSource`]'s
+/// capabilities.
+// [tag:flex_force_pool_ftr_miri]
+const FORCE_POOL_FTR: bool = cfg!(miri);
+
 /// Pool footer stored at the end of each pool. It's only used when
-/// supports_dealloc() == true`.
+/// supports_dealloc() == true` or [`FORCE_POOL_FTR`] is set.
 ///
 /// The footer is stored in the sentinel block's unused space or any padding
 /// present at the end of each pool. This is why `PoolFtr` can't be larger than
@@ -375,7 +381,7 @@ impl<
                     new_pool_len_desired,
                 )
             } {
-                if self.source.supports_dealloc() {
+                if self.source.supports_dealloc() || FORCE_POOL_FTR {
                     // Move `PoolFtr`. Note that `PoolFtr::alloc_start` is
                     // still uninitialized because this allocation is still in
                     // `self.growable_pool`, so we only have to move
@@ -493,7 +499,7 @@ impl<
         })
         .get();
 
-        if self.source.supports_dealloc() {
+        if self.source.supports_dealloc() || FORCE_POOL_FTR {
             // Link the new memory pool's `PoolFtr::prev_alloc_end` to the
             // previous pool (`self.growable_pool`).
             // Safety: `alloc` is dereferencable
@@ -634,6 +640,37 @@ impl<
         // Safety: Upheld by the caller
         Tlsf::<'static, FLBitmap, SLBitmap, FLLEN, SLLEN>::size_of_allocation_unknown_align(ptr)
     }
+
+    /// Take a provenance-less allocation pointer and restore its provenance
+    /// so that it can be passed to [`Self::dealllocate`].
+    ///
+    /// [`Self::growable_pool`] must be in use for this method to work
+    /// correctly.
+    ///
+    /// This method panics if no memory pools contain the provided pointer.
+    #[cfg(miri)]
+    pub(crate) fn restore_provenance(&self, ptr: *mut u8) -> *mut u8 {
+        let pool = iter_pools(&self.growable_pool, self.source.min_align())
+            .filter(|pool| pool.as_ptr() as *mut u8 <= ptr)
+            .max()
+            .expect("original pool not found");
+
+        pool.as_ptr().cast::<u8>().with_addr(ptr.addr())
+    }
+}
+
+/// Iterate over all memory pools linked to [`FlexTlsf::growable_pool`].
+#[inline]
+fn iter_pools(growable_pool: &Option<Pool>, align: usize) -> impl Iterator<Item = NonNull<[u8]>> {
+    let cur_alloc_or_none =
+        growable_pool.map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
+
+    core::iter::successors(cur_alloc_or_none, move |&cur_alloc| {
+        // Safety: We control the referenced pool footer
+        let cur_ftr = unsafe { *PoolFtr::get_for_alloc(cur_alloc, align) };
+
+        cur_ftr.prev_alloc
+    })
 }
 
 impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: usize> Drop
@@ -644,19 +681,9 @@ impl<Source: FlexSource, FLBitmap, SLBitmap, const FLLEN: usize, const SLLEN: us
             debug_assert!(self.source.use_growable_pool());
 
             // Deallocate all memory pools
-            let align = self.source.min_align();
-            let mut cur_alloc_or_none = self
-                .growable_pool
-                .map(|p| nonnull_slice_from_raw_parts(p.alloc_start, p.alloc_len));
-
-            while let Some(cur_alloc) = cur_alloc_or_none {
-                // Safety: We control the referenced pool footer
-                let cur_ftr = unsafe { *PoolFtr::get_for_alloc(cur_alloc, align) };
-
+            for cur_alloc in iter_pools(&self.growable_pool, self.source.min_align()) {
                 // Safety: It's an allocation we allocated from `self.source`
                 unsafe { self.source.dealloc(cur_alloc) };
-
-                cur_alloc_or_none = cur_ftr.prev_alloc;
             }
         }
     }
