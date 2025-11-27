@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
-- Fixed illegal pointer operations. `{Flex,}Tlsf` no longer trigger errors when running in MIRI.
+- Addressed [illegal](https://doc.rust-lang.org/1.91.0/reference/behavior-considered-undefined.html#r-undefined.validity.reference-box) reference creation (e.g., borrowing a partially initialized object from a raw pointer) that triggered errors on Miri.
 - Implemented a work-around for `GlobalAlloc::{dealloc,realloc}` receiving allocation pointers with insufficient provenance on Miri.
 
 ## [0.2.1] - 2023-02-17
