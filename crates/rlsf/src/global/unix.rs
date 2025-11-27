@@ -10,7 +10,9 @@ const MIN_ALIGN: usize = crate::GRANULARITY;
 
 /// The allocation unit, which is intentionally set to be larger than the usual
 /// page sizes to reduce overhead. TODO: Make this adjustable
-const ALLOC_UNIT: usize = 1 << 16;
+///
+/// A smaller value is used on Miri because it somehow speeds up execution.
+const ALLOC_UNIT: usize = if cfg!(miri) { 1 << 14 } else { 1 << 16 };
 
 pub struct Mutex(());
 
