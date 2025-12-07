@@ -496,7 +496,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         &mut self,
         block: NonNull<[u8]>,
     ) -> Option<NonZeroUsize> {
-        let start = block.as_ptr() as *mut u8 as usize;
+        let start = block.as_ptr() as *mut u8;
         let mut size = nonnull_slice_len(block);
 
         let mut cursor = start;
@@ -534,12 +534,14 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
             // `cursor` can reach `usize::MAX + 1`, but in such a case, this
             // iteration must be the last one
-            debug_assert!(cursor.checked_add(chunk_size).is_some() || size == chunk_size);
+            debug_assert!(
+                (cursor as usize).checked_add(chunk_size).is_some() || size == chunk_size
+            );
             size -= chunk_size;
             cursor = cursor.wrapping_add(chunk_size);
         }
 
-        NonZeroUsize::new(cursor.wrapping_sub(start))
+        NonZeroUsize::new((cursor as usize).wrapping_sub(start as usize))
     }
 
     /// Extend an existing memory pool by incorporating the specified memory
@@ -1522,6 +1524,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
     ) -> impl Iterator<Item = BlockInfo<'_>> + Send + '_ {
         let len = nonnull_slice_len(pool);
 
+        struct SendPtr(*mut u8);
+
+        // Safety: It is trivially safe to send a pointer
+        unsafe impl Send for SendPtr {}
+
         // Round up the starting address in the same way as
         // `insert_free_block_ptr` does.
         //
@@ -1532,19 +1539,21 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // even call this method. This means this method don't have to repeat
         // this cut-off step from `insert_free_block_ptr`.
         let unaligned_start = pool.as_ptr() as *mut u8;
-        let mut start = round_up(unaligned_start, GRANULARITY) as usize;
-        let mut len = len.saturating_sub(start.wrapping_sub(unaligned_start as usize));
+        let mut start = SendPtr(round_up(unaligned_start, GRANULARITY));
+        let mut len = len.saturating_sub((start.0 as usize).wrapping_sub(unaligned_start as usize));
 
         core::iter::from_fn(move || {
+            let _ = &start;
+
             if len == 0 {
                 None
             } else {
-                let block_hdr = &*(start as *const BlockHdr);
+                let block_hdr = &*(start.0 as *const BlockHdr);
                 let block_size = block_hdr.size & SIZE_SIZE_MASK;
 
                 // Advance the cursor
                 len -= block_size;
-                start = start.wrapping_add(block_size);
+                start.0 = start.0.wrapping_add(block_size);
 
                 Some(BlockInfo { block_hdr })
             }
