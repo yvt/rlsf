@@ -175,11 +175,19 @@ macro_rules! gen_test {
             #[test]
             fn insert_free_block_ptr_near_end_fail() {
                 let mut tlsf: TheTlsf = Tlsf::new();
+
+                #[rustversion::since(1.84)]
+                const PTR: *mut u8 =
+                    std::ptr::without_provenance_mut(usize::MAX - GRANULARITY + 1);
+
+                #[rustversion::before(1.84)]
+                const PTR: *mut u8 = (usize::MAX - GRANULARITY + 1) as _;
+
                 unsafe {
                     // FIXME: Use `NonNull::<[T]>::slice_from_raw_parts` when it's stable
                     tlsf.insert_free_block_ptr(
                         NonNull::new(core::ptr::slice_from_raw_parts_mut(
-                            (usize::MAX - GRANULARITY + 1) as _,
+                            PTR,
                             0,
                         ))
                         .unwrap(),
