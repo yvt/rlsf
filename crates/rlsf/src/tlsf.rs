@@ -14,7 +14,7 @@ use core::{
 
 use crate::{
     int::BinInteger,
-    utils::{nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start},
+    utils::{nonnull_slice_from_raw_parts, nonnull_slice_len, nonnull_slice_start, round_up},
 };
 
 #[doc = svgbobdoc::transform!(
@@ -465,11 +465,11 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         let len = nonnull_slice_len(block);
 
         // Round up the starting address
-        let unaligned_start = block.as_ptr() as *mut u8 as usize;
-        let start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
+        let unaligned_start = block.as_ptr() as *mut u8;
+        let start = round_up(unaligned_start, GRANULARITY);
 
         let len = if let Some(x) = len
-            .checked_sub(start.wrapping_sub(unaligned_start))
+            .checked_sub((start as usize).wrapping_sub(unaligned_start as usize))
             .filter(|&x| x >= GRANULARITY * 2)
         {
             // Round down
@@ -481,13 +481,13 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Safety: The slice being created here
         let pool_len = self.insert_free_block_ptr_aligned(NonNull::new_unchecked(
-            core::ptr::slice_from_raw_parts_mut(start as *mut u8, len),
+            core::ptr::slice_from_raw_parts_mut(start, len),
         ))?;
 
         // Safety: The sum should not wrap around because it represents the size
         //         of a memory pool on memory
         Some(NonZeroUsize::new_unchecked(
-            pool_len.get() + start.wrapping_sub(unaligned_start),
+            pool_len.get() + (start as usize).wrapping_sub(unaligned_start as usize),
         ))
     }
 
@@ -816,15 +816,14 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
             }
 
             // Decide the starting address of the payload
-            let unaligned_ptr = block.as_ptr() as *mut u8 as usize + mem::size_of::<UsedBlockHdr>();
-            let ptr = NonNull::new_unchecked(
-                (unaligned_ptr.wrapping_add(layout.align() - 1) & !(layout.align() - 1)) as *mut u8,
-            );
+            let unaligned_ptr =
+                (block.as_ptr() as *mut u8).wrapping_add(mem::size_of::<UsedBlockHdr>());
+            let ptr = NonNull::new_unchecked(round_up(unaligned_ptr, layout.align()));
 
             if layout.align() < GRANULARITY {
-                debug_assert_eq!(unaligned_ptr, ptr.as_ptr() as usize);
+                debug_assert_eq!(unaligned_ptr, ptr.as_ptr());
             } else {
-                debug_assert_ne!(unaligned_ptr, ptr.as_ptr() as usize);
+                debug_assert_ne!(unaligned_ptr, ptr.as_ptr());
             }
 
             // Calculate the actual overhead and the final block size of the
@@ -1384,10 +1383,8 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
 
         // Decide the starting address of the payload
         let unaligned_ptr =
-            prev_phys_block.as_ptr() as *mut u8 as usize + mem::size_of::<UsedBlockHdr>();
-        let new_ptr = NonNull::new_unchecked(
-            ((unaligned_ptr + new_layout.align() - 1) & !(new_layout.align() - 1)) as *mut u8,
-        );
+            (prev_phys_block.as_ptr() as *mut u8).wrapping_add(mem::size_of::<UsedBlockHdr>());
+        let new_ptr = NonNull::new_unchecked(round_up(unaligned_ptr, new_layout.align()));
 
         // Calculate the new block size
         let new_overhead = new_ptr.as_ptr() as usize - prev_phys_block.as_ptr() as usize;
@@ -1534,9 +1531,9 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         // return values of ..." is undefined, so the user is not supposed to
         // even call this method. This means this method don't have to repeat
         // this cut-off step from `insert_free_block_ptr`.
-        let unaligned_start = pool.as_ptr() as *mut u8 as usize;
-        let mut start = unaligned_start.wrapping_add(GRANULARITY - 1) & !(GRANULARITY - 1);
-        let mut len = len.saturating_sub(start.wrapping_sub(unaligned_start));
+        let unaligned_start = pool.as_ptr() as *mut u8;
+        let mut start = round_up(unaligned_start, GRANULARITY) as usize;
+        let mut len = len.saturating_sub(start.wrapping_sub(unaligned_start as usize));
 
         core::iter::from_fn(move || {
             if len == 0 {

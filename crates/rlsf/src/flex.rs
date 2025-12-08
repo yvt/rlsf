@@ -2,6 +2,8 @@
 use const_default1::ConstDefault;
 use core::{alloc::Layout, debug_assert, ptr::NonNull, unimplemented};
 
+use crate::utils::round_down;
+
 use super::{
     int::BinInteger,
     utils::{
@@ -240,7 +242,7 @@ impl PoolFtr {
         // If `alloc_end` is not well-aligned, we need to adjust the location
         // of `PoolFtr`
         if alloc_align < core::mem::align_of::<Self>() {
-            ptr = (ptr as usize & !(core::mem::align_of::<Self>() - 1)) as _;
+            ptr = round_down(ptr, core::mem::align_of::<Self>());
         }
         ptr as _
     }
