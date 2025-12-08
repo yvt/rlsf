@@ -19,6 +19,7 @@ unstable = []
 svgbobdoc = { version = "0.3.0" }
 cfg-if = "1.0.0"
 const_default1 = { version = "1", package = "const-default", default-features = false }
+rustversion = "1"
 
 [target."cfg(unix)".dependencies]
 libc = "0.2.56"
