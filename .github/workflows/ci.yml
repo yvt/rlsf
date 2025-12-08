@@ -92,6 +92,7 @@ jobs:
 
       - name: cargo miri test (partial)
         # Miri is too slow to run all tests
+        # FIXME: Restore `cargo miri test -p rlsf --test global strings`
+        # when <https://github.com/yvt/rlsf/issues/20> is fixed
         run: |
           cargo miri test -p rlsf --lib -- _u8_u8_8_8 global
-          cargo miri test -p rlsf --test global strings

@@ -44,3 +44,35 @@ macro_rules! nn_field {
         core::ptr::addr_of_mut!((*$ptr.as_ptr()).$($tt)*)
     };
 }
+
+/// Round `ptr`'s address down to the previous `align` bytes boundary.
+#[inline]
+#[rustversion::since(1.84)]
+pub unsafe fn round_down(ptr: *mut u8, align: usize) -> *mut u8 {
+    debug_assert!(align.is_power_of_two());
+    ptr.map_addr(|addr| addr & !(align - 1))
+}
+
+/// Round `ptr`'s address down to the previous `align` bytes boundary.
+#[inline]
+#[rustversion::before(1.84)]
+pub unsafe fn round_down(ptr: *mut u8, align: usize) -> *mut u8 {
+    debug_assert!(align.is_power_of_two());
+    (ptr as usize & !(align - 1)) as *mut u8
+}
+
+/// Round `ptr`'s address up to the next `align` bytes boundary.
+#[inline]
+#[rustversion::since(1.84)]
+pub unsafe fn round_up(ptr: *mut u8, align: usize) -> *mut u8 {
+    debug_assert!(align.is_power_of_two());
+    ptr.map_addr(|addr| addr.wrapping_add(align - 1) & !(align - 1))
+}
+
+/// Round `ptr`'s address up to the next `align` bytes boundary.
+#[inline]
+#[rustversion::before(1.84)]
+pub unsafe fn round_up(ptr: *mut u8, align: usize) -> *mut u8 {
+    debug_assert!(align.is_power_of_two());
+    ((ptr as usize).wrapping_add(align - 1) & !(align - 1)) as *mut u8
+}
