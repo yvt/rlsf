@@ -1545,7 +1545,7 @@ impl<'pool, FLBitmap: BinInteger, SLBitmap: BinInteger, const FLLEN: usize, cons
         core::iter::from_fn(move || {
             let _ = &start;
 
-            if len == 0 {
+            if len < GRANULARITY * 2 {
                 None
             } else {
                 let block_hdr = &*(start.0 as *const BlockHdr);
