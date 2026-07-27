@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-27
+
+### Changed
+
+- Replace the `svgbobdoc` diagram with a pre-rendered SVG image
+
 ## [0.2.2] - 2026-02-07
 
 ### Changed
@@ -69,7 +75,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial release.
 
-[Unreleased]: https://github.com/yvt/rlsf/compare/0.2.2...HEAD
+[Unreleased]: https://github.com/yvt/rlsf/compare/0.2.3...HEAD
+[0.2.3]: https://github.com/yvt/rlsf/compare/0.2.2...0.2.3
 [0.2.2]: https://github.com/yvt/rlsf/compare/0.2.1...0.2.2
 [0.2.1]: https://github.com/yvt/rlsf/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/yvt/rlsf/compare/0.1.2...0.2.0
