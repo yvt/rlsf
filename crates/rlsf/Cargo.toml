@@ -11,9 +11,11 @@ categories = ["embedded", "no-std", "wasm", "memory-management", "web-programmin
 repository = "https://github.com/yvt/rlsf"
 
 [features]
+default = ["global_allocators"]
 doc_cfg = []
 std = []
 unstable = []
+global_allocators = []
 
 [dependencies]
 cfg-if = "1.0.0"

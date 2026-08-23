@@ -26,19 +26,11 @@ macro_rules! if_supported_target {
     (
         $($tt:tt)*
     ) => {
-        #[cfg(any(
-            all(target_arch = "wasm32", not(target_feature = "atomics")),
-            unix,
-            doc,
-        ))]
+        #[cfg(feature = "global_allocators")]
         #[cfg_attr(
             feature = "doc_cfg",
-            doc(cfg(any(
-                all(target_arch = "wasm32", not(target_feature = "atomics")),
-                unix,
-                // no `doc` here
-            )))
-        )]
+            doc(cfg(all(feature = "global_allocators"), 0)
+        ))]
         $($tt)*
     };
 }
